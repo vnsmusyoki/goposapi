@@ -1,7 +1,10 @@
 # Binaries and build output
 bin/
+build
 build/
 dist/
+main
+main.exe
 *.exe
 *.exe~
 *.dll
