@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
@@ -15,6 +16,11 @@ func Connect(database string) (*pgxpool.Pool, error) {
 	config, err = pgxpool.ParseConfig(database)
 	if err != nil {
 		return nil, err
+	}
+
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET TIME ZONE 'UTC'")
+		return err
 	}
 
     var pool *pgxpool.Pool 
