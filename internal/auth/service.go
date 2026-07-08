@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -80,6 +81,7 @@ func (s *Service) handleLogin(c *gin.Context) {
 
 	result, err := s.login(c.Request.Context(), payload, c.GetHeader("User-Agent"), c.ClientIP())
 	if err != nil {
+		log.Printf("auth login failed for %s: %v", payload.Email, err)
 		respondAuthError(c, err)
 		return
 	}
@@ -188,7 +190,7 @@ func (s *Service) login(ctx context.Context, payload LoginRequest, userAgent, ip
 		return nil, err
 	}
 
-	modules, err := fetchModules(ctx, tx, user.ID, workspaceTypeFromRoles(roles))
+	modules, err := fetchModules(ctx, tx, user.ID, roles)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +265,7 @@ func (s *Service) currentUser(ctx context.Context, rawToken string) (*UserRespon
 		return nil, time.Time{}, err
 	}
 
-	modules, err := fetchModules(ctx, s.db, user.ID, workspaceTypeFromRoles(roles))
+	modules, err := fetchModules(ctx, s.db, user.ID, roles)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
@@ -346,7 +348,7 @@ func fetchRoles(ctx context.Context, q queryer, userID string) ([]RoleResponse, 
 	return roles, nil
 }
 
-func fetchModules(ctx context.Context, q queryer, userID, workspaceType string) ([]ModuleResponse, error) {
+func fetchModules(ctx context.Context, q queryer, userID string, roles []RoleResponse) ([]ModuleResponse, error) {
 	modules, err := loadModules(ctx, q, `
 		SELECT m.id::text, m.code, m.name, COALESCE(m.description, ''), COALESCE(m.icon, ''), COALESCE(m.path, ''), m.sort_order
 		FROM user_modules um
@@ -363,13 +365,38 @@ func fetchModules(ctx context.Context, q queryer, userID, workspaceType string) 
 		return attachSubmodules(ctx, q, modules)
 	}
 
-	modules, err = loadModules(ctx, q, `
+	roleIDs := make([]string, 0, len(roles))
+	seenRoleIDs := make(map[string]struct{}, len(roles))
+	for _, role := range roles {
+		roleID := strings.TrimSpace(role.ID)
+		if roleID == "" {
+			continue
+		}
+		if _, exists := seenRoleIDs[roleID]; exists {
+			continue
+		}
+		seenRoleIDs[roleID] = struct{}{}
+		roleIDs = append(roleIDs, roleID)
+	}
+
+	if len(roleIDs) == 0 {
+		return []ModuleResponse{}, nil
+	}
+
+	rolePlaceholders := make([]string, 0, len(roleIDs))
+	roleArgs := make([]any, 0, len(roleIDs))
+	for i, roleID := range roleIDs {
+		rolePlaceholders = append(rolePlaceholders, fmt.Sprintf("$%d", i+1))
+		roleArgs = append(roleArgs, roleID)
+	}
+
+	modules, err = loadModules(ctx, q, fmt.Sprintf(`
 		SELECT id::text, code, name, COALESCE(description, ''), COALESCE(icon, ''), COALESCE(path, ''), sort_order
 		FROM modules
-		WHERE workspace_type = $1
+		WHERE role_id IN (%s)
 		  AND is_active = TRUE
 		ORDER BY sort_order ASC, name ASC
-	`, workspaceType)
+	`, strings.Join(rolePlaceholders, ", ")), roleArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -377,8 +404,8 @@ func fetchModules(ctx context.Context, q queryer, userID, workspaceType string) 
 	return attachSubmodules(ctx, q, modules)
 }
 
-func loadModules(ctx context.Context, q queryer, query string, arg string) ([]ModuleResponse, error) {
-	rows, err := q.Query(ctx, query, arg)
+func loadModules(ctx context.Context, q queryer, query string, args ...any) ([]ModuleResponse, error) {
+	rows, err := q.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("load modules: %w", err)
 	}
@@ -414,11 +441,22 @@ func attachSubmodules(ctx context.Context, q queryer, modules []ModuleResponse) 
 
 func fetchSubmodules(ctx context.Context, q queryer, moduleID string) ([]SubmoduleResponse, error) {
 	rows, err := q.Query(ctx, `
-		SELECT id::text, code, name, COALESCE(description, ''), COALESCE(icon, ''), COALESCE(path, ''), sort_order
-		FROM submodules
-		WHERE module_id = $1
-		  AND is_active = TRUE
-		ORDER BY sort_order ASC, name ASC
+		SELECT
+			sm.id::text,
+			sm.code,
+			sm.name,
+			COALESCE(sm.description, ''),
+			COALESCE(sm.icon, ''),
+			CASE
+				WHEN COALESCE(m.path, '') = '' THEN '/' || sm.code
+				ELSE RTRIM(m.path, '/') || '/' || sm.code
+			END AS path,
+			sm.sort_order
+		FROM sub_modules sm
+		JOIN modules m ON m.id = sm.module_id
+		WHERE sm.module_id = $1
+		  AND sm.is_active = TRUE
+		ORDER BY sm.sort_order ASC, sm.name ASC
 	`, moduleID)
 	if err != nil {
 		return nil, fmt.Errorf("load submodules: %w", err)
@@ -439,20 +477,6 @@ func fetchSubmodules(ctx context.Context, q queryer, moduleID string) ([]Submodu
 	}
 
 	return submodules, nil
-}
-
-func workspaceTypeFromRoles(roles []RoleResponse) string {
-	for _, role := range roles {
-		if strings.EqualFold(role.Code, "admin") {
-			return "admin"
-		}
-	}
-
-	if len(roles) > 0 {
-		return strings.ToLower(strings.TrimSpace(roles[0].Code))
-	}
-
-	return "admin"
 }
 
 type queryer interface {
@@ -519,6 +543,7 @@ func respondAuthError(c *gin.Context, err error) {
 		return
 	}
 
+	log.Printf("auth error: %v", err)
 	c.JSON(http.StatusInternalServerError, gin.H{
 		"message": "Something went wrong.",
 	})
