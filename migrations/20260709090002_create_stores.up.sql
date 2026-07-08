@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS stores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(50) UNIQUE,
+    address VARCHAR(255),
+    city VARCHAR(100),
+    country VARCHAR(100),
+    phone VARCHAR(20),
+    timezone VARCHAR(100) DEFAULT 'UTC',
+    currency VARCHAR(10) DEFAULT 'USD',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    server_time TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Nairobi'),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER set_stores_updated_at
+BEFORE UPDATE ON stores
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

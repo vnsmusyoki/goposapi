@@ -76,7 +76,7 @@ case "$CMD" in
       echo "Usage: ./scripts/migrate.sh create <migration_name>"
       exit 1
     fi
-    migrate create -ext sql -dir "$MIGRATIONS_DIR" -seq "$NAME"
+    migrate create -ext sql -dir "$MIGRATIONS_DIR" "$NAME"
     echo "Created migration files for: $NAME"
     ;;
 
