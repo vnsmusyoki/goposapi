@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS user_modules;
+DROP TABLE IF EXISTS submodules;
+DROP TABLE IF EXISTS modules;
