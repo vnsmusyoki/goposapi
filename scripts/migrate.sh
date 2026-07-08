@@ -20,9 +20,18 @@
 
 set -euo pipefail
 
-# Load .env if present
+# Load env files if present.
+# Use shell sourcing so DATABASE_URL can reference DB_* variables.
+if [ -f .env.local ]; then
+  set -a
+  . ./.env.local
+  set +a
+fi
+
 if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
+  set -a
+  . ./.env
+  set +a
 fi
 
 if [ -z "${DATABASE_URL:-}" ]; then
