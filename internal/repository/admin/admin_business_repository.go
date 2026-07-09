@@ -18,6 +18,11 @@ type businessUser struct {
 	FullName string
 }
 
+type assignedModule struct {
+	ModuleID    string
+	SubModuleID sql.NullString
+}
+
 type queryer interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 	Query(context.Context, string, ...any) (pgx.Rows, error)
@@ -62,6 +67,12 @@ func CreateBusinessRepository(
 	if exists {
 		return nil, ErrBusinessAlreadyExists
 	}
+
+	packageInfo, err := packageBySlug(ctx, tx, req.SubscriptionPlan)
+	if err != nil {
+		return nil, err
+	}
+	req.SubscriptionPlan = packageInfo.Slug
 
 	businessRoleID, err := roleIDByCode(ctx, tx, "business")
 	if err != nil {
@@ -119,6 +130,10 @@ func CreateBusinessRepository(
 
 	businessID, err := createBusiness(ctx, tx, req)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := createBusinessSubscription(ctx, tx, businessID, packageInfo); err != nil {
 		return nil, err
 	}
 
@@ -221,6 +236,43 @@ func roleIDByCode(ctx context.Context, q queryer, code string) (string, error) {
 	return roleID, nil
 }
 
+func packageBySlug(ctx context.Context, q queryer, slug string) (*BusinessPackageInfo, error) {
+	var info BusinessPackageInfo
+	var billingIntervalMonths sql.NullInt64
+
+	if err := q.QueryRow(ctx, `
+		SELECT
+			p.id::text,
+			p.slug,
+			bi.code,
+			bi.interval_months,
+			COALESCE(p.trial_days, 0)
+		FROM packages p
+		JOIN billing_intervals bi ON bi.id = p.billing_interval_id
+		WHERE p.slug = $1
+		  AND p.is_active = TRUE
+		LIMIT 1
+	`, strings.ToLower(strings.TrimSpace(slug))).Scan(
+		&info.ID,
+		&info.Slug,
+		&info.BillingIntervalCode,
+		&billingIntervalMonths,
+		&info.TrialDays,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPackageNotFound
+		}
+		return nil, fmt.Errorf("load package: %w", err)
+	}
+
+	if billingIntervalMonths.Valid {
+		months := int(billingIntervalMonths.Int64)
+		info.BillingIntervalMonths = &months
+	}
+
+	return &info, nil
+}
+
 func ensureBusinessRole(ctx context.Context, tx pgx.Tx, userID, roleID string) error {
 	_, err := tx.Exec(ctx, `
 		INSERT INTO user_roles (user_id, role_id)
@@ -307,6 +359,42 @@ func createBusiness(ctx context.Context, tx pgx.Tx, req CreateBusinessInput) (st
 	return businessID, nil
 }
 
+func createBusinessSubscription(ctx context.Context, tx pgx.Tx, businessID string, pkg *BusinessPackageInfo) error {
+	now := time.Now().UTC()
+	var currentPeriodEnd time.Time
+	if pkg.BillingIntervalCode == "lifetime" {
+		currentPeriodEnd = now.AddDate(100, 0, 0)
+	} else if pkg.BillingIntervalMonths != nil && *pkg.BillingIntervalMonths > 0 {
+		currentPeriodEnd = now.AddDate(0, *pkg.BillingIntervalMonths, 0)
+	} else {
+		currentPeriodEnd = now.AddDate(0, 1, 0)
+	}
+
+	var trialEndsAt any
+	if pkg.TrialDays > 0 {
+		trialEndsAt = now.AddDate(0, 0, pkg.TrialDays)
+	} else {
+		trialEndsAt = nil
+	}
+
+	_, err := tx.Exec(ctx, `
+		INSERT INTO business_subscriptions (
+			business_id,
+			package_id,
+			status,
+			current_period_end,
+			trial_ends_at,
+			auto_renew
+		)
+		VALUES ($1, $2, 'trialing', $3, $4, TRUE)
+	`, businessID, pkg.ID, currentPeriodEnd, trialEndsAt)
+	if err != nil {
+		return fmt.Errorf("create business subscription: %w", err)
+	}
+
+	return nil
+}
+
 func businessManagerLinkExists(ctx context.Context, q queryer, businessID, userID string) (bool, error) {
 	var exists bool
 	if err := q.QueryRow(ctx, `
@@ -360,16 +448,24 @@ func assignBusinessModules(ctx context.Context, tx pgx.Tx, businessID string) er
 	if err != nil {
 		return fmt.Errorf("load business modules: %w", err)
 	}
-	defer rows.Close()
-
+	modules := make([]assignedModule, 0)
 	for rows.Next() {
-		var moduleID string
-		var subModuleID sql.NullString
-		if err := rows.Scan(&moduleID, &subModuleID); err != nil {
+		var module assignedModule
+		if err := rows.Scan(&module.ModuleID, &module.SubModuleID); err != nil {
+			rows.Close()
 			return fmt.Errorf("scan business module: %w", err)
 		}
+		modules = append(modules, module)
+	}
 
-		exists, err := businessModuleAssignmentExists(ctx, tx, businessID, moduleID, subModuleID)
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterate business modules: %w", err)
+	}
+	rows.Close()
+
+	for _, module := range modules {
+		exists, err := businessModuleAssignmentExists(ctx, tx, businessID, module.ModuleID, module.SubModuleID)
 		if err != nil {
 			return err
 		}
@@ -377,13 +473,9 @@ func assignBusinessModules(ctx context.Context, tx pgx.Tx, businessID string) er
 			continue
 		}
 
-		if err := insertBusinessModuleAssignment(ctx, tx, businessID, moduleID, subModuleID); err != nil {
+		if err := insertBusinessModuleAssignment(ctx, tx, businessID, module.ModuleID, module.SubModuleID); err != nil {
 			return err
 		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate business modules: %w", err)
 	}
 
 	return nil

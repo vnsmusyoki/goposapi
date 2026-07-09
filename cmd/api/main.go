@@ -31,6 +31,7 @@ func main() {
 	router := gin.Default()
 	router.SetTrustedProxies(nil)
 	router.Use(middleware.CORS(conf.FrontendOrigin))
+	router.Use(middleware.RequestLogger())
 
 	api := router.Group("/api")
 	api.GET("/health", func(c *gin.Context) {
@@ -38,11 +39,12 @@ func main() {
 			"status": "ok",
 		})
 	})
+	
+	authService := auth.NewService(pool, conf.CookieSecure)
+	authService.RegisterRoutes(api.Group("/auth"))
 	api.POST("/businesses", adminhandler.CreateBusinessRequestHandler(pool))
 	api.POST("/packages", adminhandler.CreatePackageRequestHandler(pool))
 
-	authService := auth.NewService(pool, conf.CookieSecure)
-	authService.RegisterRoutes(api.Group("/auth"))
 
 	router.Run(":" + conf.Port)
 }

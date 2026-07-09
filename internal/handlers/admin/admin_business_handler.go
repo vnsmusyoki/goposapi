@@ -1,7 +1,10 @@
 package admin
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
+	"log"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -12,23 +15,23 @@ import (
 )
 
 type RegisterBusinessRequest struct {
-	Name               string                   `json:"name" binding:"required"`
-	BusinessEmail      string                   `json:"business_email" binding:"required,email"`
-	BusinessPhone      string                   `json:"business_phone"`
-	RegistrationNumber string                   `json:"registration_number"`
-	Industry           string                   `json:"industry"`
-	OwnerName          string                   `json:"owner_name"`
-	SubscriptionPlan   string                   `json:"subscription_plan"`
-	ManagerID          string                   `json:"manager_id"`
+	Name               *string                  `json:"name"`
+	BusinessEmail      *string                  `json:"business_email"`
+	BusinessPhone      *string                  `json:"business_phone"`
+	RegistrationNumber *string                  `json:"registration_number"`
+	Industry           *string                  `json:"industry"`
+	OwnerName          *string                  `json:"owner_name"`
+	SubscriptionPlan   *string                  `json:"subscription_plan"`
+	ManagerID          *string                  `json:"manager_id"`
 	Manager            *RegisterBusinessManager `json:"manager,omitempty"`
 }
 
 type RegisterBusinessManager struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	FullName string `json:"full_name"`
-	Phone    string `json:"phone"`
+	Username *string `json:"username"`
+	Email    *string `json:"email"`
+	Password *string `json:"password"`
+	FullName *string `json:"full_name"`
+	Phone    *string `json:"phone"`
 }
 
 type RegisterBusinessResponse struct {
@@ -41,34 +44,54 @@ type RegisterBusinessResponse struct {
 func CreateBusinessRequestHandler(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req RegisterBusinessRequest
+		log.Printf("create business handler: request received remote_ip=%s content_length=%d content_type=%s",
+			c.ClientIP(), c.Request.ContentLength, c.GetHeader("Content-Type"))
 
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"message": "Validation failed",
-				"errors":  map[string]string{"form": err.Error()},
-			})
+		body, err := c.GetRawData()
+		if err != nil && !errors.Is(err, io.EOF) {
+			log.Printf("create business handler: read body failed err=%v", err)
+			c.JSON(http.StatusBadRequest, businessValidationFailed(map[string]string{
+				"form": "Unable to read request body.",
+			}))
+			return
+		}
+
+		if len(strings.TrimSpace(string(body))) == 0 {
+			log.Printf("create business handler: empty request body, validating missing fields")
+			c.JSON(http.StatusBadRequest, businessValidationFailed(businessFieldErrors(nil)))
+			return
+		}
+
+		if err := json.Unmarshal(body, &req); err != nil {
+			log.Printf("create business handler: invalid json err=%v body=%s", err, string(body))
+			c.JSON(http.StatusBadRequest, businessValidationFailed(map[string]string{
+				"form": "Request body must be valid JSON.",
+			}))
 			return
 		}
 
 		req.normalize()
 
-		if err := validateRegisterBusinessRequest(&req); err != nil {
-			c.JSON(http.StatusBadRequest, err)
+		if errs := businessFieldErrors(&req); len(errs) > 0 {
+			log.Printf("create business handler: validation failed missing_or_invalid_fields=%v", errs)
+			c.JSON(http.StatusBadRequest, businessValidationFailed(errs))
 			return
 		}
 
+		log.Printf("create business handler: calling repository business=%q email=%q manager_id=%q", derefString(req.Name), derefString(req.BusinessEmail), derefString(req.ManagerID))
 		result, err := repoadmin.CreateBusinessRepository(pool, repoadmin.CreateBusinessInput{
-			Name:               req.Name,
-			BusinessEmail:      req.BusinessEmail,
-			BusinessPhone:      req.BusinessPhone,
-			RegistrationNumber: req.RegistrationNumber,
-			Industry:           req.Industry,
-			OwnerName:          req.OwnerName,
-			SubscriptionPlan:   req.SubscriptionPlan,
-			ExistingManagerID:  req.ManagerID,
+			Name:               derefString(req.Name),
+			BusinessEmail:      derefString(req.BusinessEmail),
+			BusinessPhone:      derefString(req.BusinessPhone),
+			RegistrationNumber: derefString(req.RegistrationNumber),
+			Industry:           derefString(req.Industry),
+			OwnerName:          derefString(req.OwnerName),
+			SubscriptionPlan:   derefString(req.SubscriptionPlan),
+			ExistingManagerID:  derefString(req.ManagerID),
 			Manager:            toCreateBusinessManagerInput(req.Manager),
 		})
 		if err != nil {
+			log.Printf("create business handler: repository failed business=%q email=%q err=%v", derefString(req.Name), derefString(req.BusinessEmail), err)
 			switch {
 			case errors.Is(err, repoadmin.ErrBusinessAlreadyExists):
 				c.JSON(http.StatusConflict, gin.H{
@@ -86,11 +109,12 @@ func CreateBusinessRequestHandler(pool *pgxpool.Pool) gin.HandlerFunc {
 				c.JSON(http.StatusNotFound, gin.H{
 					"message": "Manager not found",
 				})
+			case errors.Is(err, repoadmin.ErrPackageNotFound):
+				c.JSON(http.StatusBadRequest, businessValidationFailed(map[string]string{
+					"subscription_plan": "Selected package slug does not exist.",
+				}))
 			case errors.Is(err, repoadmin.ErrInvalidManagerInput), errors.Is(err, repoadmin.ErrInvalidBusinessInput):
-				c.JSON(http.StatusBadRequest, gin.H{
-					"message": "Validation failed",
-					"errors":  map[string]string{"form": err.Error()},
-				})
+				c.JSON(http.StatusBadRequest, businessValidationFailed(map[string]string{"form": err.Error()}))
 			default:
 				c.JSON(http.StatusInternalServerError, gin.H{
 					"message": "Failed to create business",
@@ -116,72 +140,95 @@ func CreateBusinessRequestHandler(pool *pgxpool.Pool) gin.HandlerFunc {
 }
 
 func (r *RegisterBusinessRequest) normalize() {
-	r.Name = strings.TrimSpace(r.Name)
-	r.BusinessEmail = strings.ToLower(strings.TrimSpace(r.BusinessEmail))
-	r.BusinessPhone = strings.TrimSpace(r.BusinessPhone)
-	r.RegistrationNumber = strings.TrimSpace(r.RegistrationNumber)
-	r.Industry = strings.TrimSpace(r.Industry)
-	r.OwnerName = strings.TrimSpace(r.OwnerName)
-	r.SubscriptionPlan = strings.TrimSpace(r.SubscriptionPlan)
-	r.ManagerID = strings.TrimSpace(r.ManagerID)
+	r.Name = normalizeStringPtr(r.Name, false)
+	r.BusinessEmail = normalizeStringPtr(r.BusinessEmail, true)
+	r.BusinessPhone = normalizeStringPtr(r.BusinessPhone, false)
+	r.RegistrationNumber = normalizeStringPtr(r.RegistrationNumber, false)
+	r.Industry = normalizeStringPtr(r.Industry, false)
+	r.OwnerName = normalizeStringPtr(r.OwnerName, false)
+	r.SubscriptionPlan = normalizeStringPtr(r.SubscriptionPlan, false)
+	r.ManagerID = normalizeStringPtr(r.ManagerID, false)
 
 	if r.Manager != nil {
-		r.Manager.Username = strings.TrimSpace(r.Manager.Username)
-		r.Manager.Email = strings.ToLower(strings.TrimSpace(r.Manager.Email))
-		r.Manager.Password = strings.TrimSpace(r.Manager.Password)
-		r.Manager.FullName = strings.TrimSpace(r.Manager.FullName)
-		r.Manager.Phone = strings.TrimSpace(r.Manager.Phone)
+		r.Manager.Username = normalizeStringPtr(r.Manager.Username, false)
+		r.Manager.Email = normalizeStringPtr(r.Manager.Email, true)
+		r.Manager.Password = normalizeStringPtr(r.Manager.Password, false)
+		r.Manager.FullName = normalizeStringPtr(r.Manager.FullName, false)
+		r.Manager.Phone = normalizeStringPtr(r.Manager.Phone, false)
 	}
 }
 
-func validateRegisterBusinessRequest(req *RegisterBusinessRequest) gin.H {
+func businessFieldErrors(req *RegisterBusinessRequest) map[string]string {
 	errorsMap := map[string]string{}
+	hasManagerDetails := req != nil && req.Manager != nil
 
-	if req.Name == "" {
+	if req == nil || req.Name == nil || strings.TrimSpace(*req.Name) == "" {
 		errorsMap["name"] = "Name is required."
 	}
 
-	if req.BusinessEmail == "" {
+	if req == nil || req.BusinessEmail == nil || strings.TrimSpace(*req.BusinessEmail) == "" {
 		errorsMap["business_email"] = "Business email is required."
-	} else if _, err := mail.ParseAddress(req.BusinessEmail); err != nil {
+	} else if _, err := mail.ParseAddress(*req.BusinessEmail); err != nil {
 		errorsMap["business_email"] = "Enter a valid business email address."
 	}
 
-	if req.ManagerID != "" && req.Manager != nil {
+	if req == nil || req.BusinessPhone == nil || strings.TrimSpace(*req.BusinessPhone) == "" {
+		errorsMap["business_phone"] = "Business phone is required."
+	}
+
+	if req == nil || req.RegistrationNumber == nil || strings.TrimSpace(*req.RegistrationNumber) == "" {
+		errorsMap["registration_number"] = "Registration number is required."
+	}
+
+	if req == nil || req.Industry == nil || strings.TrimSpace(*req.Industry) == "" {
+		errorsMap["industry"] = "Industry is required."
+	}
+
+	if req == nil || req.OwnerName == nil || strings.TrimSpace(*req.OwnerName) == "" {
+		errorsMap["owner_name"] = "Owner name is required."
+	}
+
+	if req == nil || req.SubscriptionPlan == nil || strings.TrimSpace(*req.SubscriptionPlan) == "" {
+		errorsMap["subscription_plan"] = "Subscription plan is required."
+	}
+
+	if !hasManagerDetails && (req == nil || req.ManagerID == nil || strings.TrimSpace(*req.ManagerID) == "") {
+		errorsMap["manager_id"] = "Manager ID is required when manager details are not provided."
+	}
+
+	if req != nil && req.ManagerID != nil && strings.TrimSpace(*req.ManagerID) != "" && hasManagerDetails {
 		errorsMap["manager"] = "Provide either manager_id or manager details, not both."
 	}
 
-	if req.ManagerID == "" {
-		if req.Manager == nil {
-			errorsMap["manager"] = "Manager details or manager_id are required."
-		} else {
-			if req.Manager.Username == "" {
-				errorsMap["manager.username"] = "Username is required."
-			}
-			if req.Manager.Email == "" {
-				errorsMap["manager.email"] = "Email is required."
-			} else if _, err := mail.ParseAddress(req.Manager.Email); err != nil {
-				errorsMap["manager.email"] = "Enter a valid email address."
-			}
-			if req.Manager.Password == "" {
-				errorsMap["manager.password"] = "Password is required."
-			} else if len(req.Manager.Password) < 8 {
-				errorsMap["manager.password"] = "Password must be at least 8 characters."
-			}
-			if req.Manager.FullName == "" {
-				errorsMap["manager.full_name"] = "Full name is required."
-			}
+	if hasManagerDetails {
+		if req.Manager.Username == nil || strings.TrimSpace(*req.Manager.Username) == "" {
+			errorsMap["manager.username"] = "Username is required."
 		}
+		if req.Manager.Email == nil || strings.TrimSpace(*req.Manager.Email) == "" {
+			errorsMap["manager.email"] = "Email is required."
+		} else if _, err := mail.ParseAddress(*req.Manager.Email); err != nil {
+			errorsMap["manager.email"] = "Enter a valid email address."
+		}
+		if req.Manager.Password == nil || strings.TrimSpace(*req.Manager.Password) == "" {
+			errorsMap["manager.password"] = "Password is required."
+		} else if len(strings.TrimSpace(*req.Manager.Password)) < 8 {
+			errorsMap["manager.password"] = "Password must be at least 8 characters."
+		}
+		if req.Manager.FullName == nil || strings.TrimSpace(*req.Manager.FullName) == "" {
+			errorsMap["manager.full_name"] = "Full name is required."
+		}
+		if req.Manager.Phone == nil || strings.TrimSpace(*req.Manager.Phone) == "" {
+			errorsMap["manager.phone"] = "Phone is required."
+		}
+	} else if req == nil || req.ManagerID == nil || strings.TrimSpace(*req.ManagerID) == "" {
+		errorsMap["manager.username"] = "Username is required."
+		errorsMap["manager.email"] = "Email is required."
+		errorsMap["manager.password"] = "Password is required."
+		errorsMap["manager.full_name"] = "Full name is required."
+		errorsMap["manager.phone"] = "Phone is required."
 	}
 
-	if len(errorsMap) == 0 {
-		return nil
-	}
-
-	return gin.H{
-		"message": "Validation failed",
-		"errors":  errorsMap,
-	}
+	return errorsMap
 }
 
 func toCreateBusinessManagerInput(req *RegisterBusinessManager) *repoadmin.CreateBusinessManagerInput {
@@ -190,10 +237,42 @@ func toCreateBusinessManagerInput(req *RegisterBusinessManager) *repoadmin.Creat
 	}
 
 	return &repoadmin.CreateBusinessManagerInput{
-		Username: req.Username,
-		Email:    req.Email,
-		Password: req.Password,
-		FullName: req.FullName,
-		Phone:    req.Phone,
+		Username: derefString(req.Username),
+		Email:    derefString(req.Email),
+		Password: derefString(req.Password),
+		FullName: derefString(req.FullName),
+		Phone:    derefString(req.Phone),
 	}
+}
+
+func businessValidationFailed(errorsMap map[string]string) gin.H {
+	if len(errorsMap) == 0 {
+		errorsMap = map[string]string{"form": "Validation failed."}
+	}
+
+	return gin.H{
+		"message": "Validation failed",
+		"errors":  errorsMap,
+	}
+}
+
+func normalizeStringPtr(value *string, lower bool) *string {
+	if value == nil {
+		return nil
+	}
+
+	trimmed := strings.TrimSpace(*value)
+	if lower {
+		trimmed = strings.ToLower(trimmed)
+	}
+
+	return &trimmed
+}
+
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(*value)
 }
