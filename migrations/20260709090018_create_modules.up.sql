@@ -43,15 +43,18 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TABLE IF NOT EXISTS user_modules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL
+    user_id UUID  NULL
         REFERENCES users(id)
         ON DELETE CASCADE,
     module_id UUID NOT NULL
         REFERENCES modules(id)
         ON DELETE CASCADE,
+    business_id UUID  NULL
+        REFERENCES businesses(id)
+        ON DELETE CASCADE,
     sub_module_id UUID NULL
         REFERENCES sub_modules(id)
         ON DELETE SET NULL,
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (user_id, module_id, sub_module_id)
+    UNIQUE (user_id, module_id, sub_module_id, business_id)
 );
