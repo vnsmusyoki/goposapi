@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS sub_modules (
     role_id UUID NOT NULL
         REFERENCES roles(id)
         ON DELETE CASCADE,
+    url VARCHAR(255) NOT NULL,
     code VARCHAR(100) NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT,

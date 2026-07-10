@@ -35,13 +35,30 @@ type ModuleResponse struct {
 	Children    []SubmoduleResponse `json:"children,omitempty"`
 }
 
+type NavigationItemResponse struct {
+	Name string `json:"name"`
+	Icon string `json:"icon,omitempty"`
+	Path string `json:"path"`
+}
+
+type NavigationGroupResponse struct {
+	Name  string                   `json:"name"`
+	Items []NavigationItemResponse `json:"items"`
+}
+
 type UserResponse struct {
-	ID       string           `json:"id"`
-	Email    string           `json:"email"`
-	FullName string           `json:"fullName"`
-	IsActive bool             `json:"isActive"`
-	Roles    []RoleResponse   `json:"roles"`
-	Modules  []ModuleResponse `json:"modules"`
+	ID               string           `json:"id"`
+	Email            string           `json:"email"`
+	FullName         string           `json:"fullName"`
+	IsActive         bool             `json:"isActive"`
+	Roles            []RoleResponse   `json:"roles"`
+	Modules          []ModuleResponse `json:"modules"`
+	LandingPath      string           `json:"landingPath,omitempty"`
+	ActiveBusinessID string           `json:"activeBusinessId,omitempty"`
+}
+
+type ModulesResponse struct {
+	Modules []NavigationGroupResponse `json:"modules"`
 }
 
 type SessionResponse struct {

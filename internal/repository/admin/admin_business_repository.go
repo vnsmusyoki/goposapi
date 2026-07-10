@@ -327,7 +327,8 @@ func createBusinessUser(ctx context.Context, tx pgx.Tx, roleID string, req Creat
 func updateBusinessUserAssignment(ctx context.Context, tx pgx.Tx, userID, businessID string) error {
 	_, err := tx.Exec(ctx, `
 		UPDATE users
-		SET business_id = $1
+		SET business_id = $1,
+		    active_business_id = $1
 		WHERE id = $2
 	`, businessID, userID)
 	if err != nil {

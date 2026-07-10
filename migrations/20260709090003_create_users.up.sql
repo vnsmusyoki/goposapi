@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone VARCHAR(20),
     role_id UUID REFERENCES roles(id)  ON DELETE RESTRICT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    active_business_id UUID  REFERENCES businesses(id) ON DELETE SET NULL,
     last_login_at TIMESTAMPTZ,
     server_time TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Nairobi'),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
