@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS product_sub_categories;

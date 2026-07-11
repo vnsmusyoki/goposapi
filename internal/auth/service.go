@@ -98,8 +98,9 @@ func (s *Service) handleLogin(c *gin.Context) {
 func (s *Service) handleMe(c *gin.Context) {
 	token, ok := readSessionCookie(c.Request)
 	if !ok {
+		http.SetCookie(c.Writer, clearSessionCookie(s.cookieSecure))
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Not authenticated",
+			"message": "Session expired. Please log in again.",
 		})
 		return
 	}
@@ -122,8 +123,9 @@ func (s *Service) handleMe(c *gin.Context) {
 func (s *Service) handleModules(c *gin.Context) {
 	token, ok := readSessionCookie(c.Request)
 	if !ok {
+		http.SetCookie(c.Writer, clearSessionCookie(s.cookieSecure))
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Not authenticated",
+			"message": "Session expired. Please log in again.",
 		})
 		return
 	}
@@ -161,6 +163,15 @@ func (s *Service) handleLogout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Logged out successfully",
 	})
+}
+
+func (s *Service) CurrentUserFromRequest(ctx context.Context, req *http.Request) (*UserResponse, time.Time, error) {
+	token, ok := readSessionCookie(req)
+	if !ok {
+		return nil, time.Time{}, errSessionMissing
+	}
+
+	return s.currentUser(ctx, token)
 }
 
 type loginResult struct {
@@ -227,9 +238,31 @@ func (s *Service) login(ctx context.Context, payload LoginRequest, userAgent, ip
 		return nil, err
 	}
 
-	businessID, err := resolveBusinessContextID(ctx, tx, user.ID, user.ActiveBusinessID, user.BusinessID)
-	if err != nil {
-		return nil, err
+	businessID := ""
+	if primaryRoleCode(roles) == "business" {
+		businessID, err = resolveBusinessLoginContextID(ctx, tx, user.ID, user.ActiveBusinessID)
+		if err != nil {
+			return nil, err
+		}
+		if businessID == "" {
+			return nil, &apiError{
+				Status:  http.StatusForbidden,
+				Message: "You need to be linked to a business to continue.",
+			}
+		}
+
+		if _, err := tx.Exec(ctx, `
+			UPDATE users
+			SET active_business_id = $1
+			WHERE id = $2
+		`, businessID, user.ID); err != nil {
+			return nil, fmt.Errorf("update active business: %w", err)
+		}
+	} else {
+		businessID, err = resolveBusinessContextID(ctx, tx, user.ID, user.ActiveBusinessID, user.BusinessID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	modules, err := fetchModules(ctx, tx, user.ID, roles, businessID)
@@ -404,9 +437,7 @@ func fetchRoles(ctx context.Context, q queryer, userID string) ([]RoleResponse, 
 }
 
 type navigationModuleBuilder struct {
-	name       string
 	moduleItem *NavigationItemResponse
-	items      []NavigationItemResponse
 }
 
 func fetchNavigationModules(ctx context.Context, q queryer, userID string, roles []RoleResponse) ([]NavigationGroupResponse, error) {
@@ -434,6 +465,7 @@ func loadNavigationModules(ctx context.Context, q queryer, scope string, scopeID
 			m.name AS module_name,
 			COALESCE(m.icon, '') AS module_icon,
 			COALESCE(m.path, '') AS module_path,
+			m.has_sub_modules AS module_has_sub_modules,
 			m.sort_order AS module_sort_order,
 			COALESCE(sm.id::text, '') AS sub_module_id,
 			COALESCE(sm.name, '') AS item_name,
@@ -468,16 +500,17 @@ func loadNavigationModules(ctx context.Context, q queryer, scope string, scopeID
 
 	for rows.Next() {
 		var (
-			moduleID        string
-			moduleName      string
-			moduleIcon      string
-			modulePath      string
-			moduleSortOrder int
-			subModuleID     string
-			itemName        string
-			itemIcon        string
-			itemPath        string
-			itemSortOrder   int
+			moduleID            string
+			moduleName          string
+			moduleIcon          string
+			modulePath          string
+			moduleHasSubModules bool
+			moduleSortOrder     int
+			subModuleID         string
+			itemName            string
+			itemIcon            string
+			itemPath            string
+			itemSortOrder       int
 		)
 
 		if err := rows.Scan(
@@ -485,6 +518,7 @@ func loadNavigationModules(ctx context.Context, q queryer, scope string, scopeID
 			&moduleName,
 			&moduleIcon,
 			&modulePath,
+			&moduleHasSubModules,
 			&moduleSortOrder,
 			&subModuleID,
 			&itemName,
@@ -497,18 +531,25 @@ func loadNavigationModules(ctx context.Context, q queryer, scope string, scopeID
 
 		builder, exists := builders[moduleID]
 		if !exists {
-			builder = &navigationModuleBuilder{name: moduleName}
+			builder = &navigationModuleBuilder{
+				moduleItem: &NavigationItemResponse{
+					Name:          moduleName,
+					Icon:          moduleIcon,
+					Path:          strings.TrimSpace(modulePath),
+					HasSubModules: moduleHasSubModules,
+					Children:      []NavigationItemResponse{},
+				},
+			}
 			builders[moduleID] = builder
 			order = append(order, moduleID)
 		}
 
 		if strings.TrimSpace(subModuleID) == "" {
-			if path := strings.TrimSpace(modulePath); path != "" {
-				builder.moduleItem = &NavigationItemResponse{
-					Name: moduleName,
-					Icon: moduleIcon,
-					Path: path,
-				}
+			if builder.moduleItem != nil {
+				builder.moduleItem.Name = moduleName
+				builder.moduleItem.Icon = moduleIcon
+				builder.moduleItem.Path = strings.TrimSpace(modulePath)
+				builder.moduleItem.HasSubModules = moduleHasSubModules
 			}
 			continue
 		}
@@ -518,7 +559,17 @@ func loadNavigationModules(ctx context.Context, q queryer, scope string, scopeID
 			continue
 		}
 
-		builder.items = append(builder.items, NavigationItemResponse{
+		if builder.moduleItem == nil {
+			builder.moduleItem = &NavigationItemResponse{
+				Name:          moduleName,
+				Icon:          moduleIcon,
+				Path:          strings.TrimSpace(modulePath),
+				HasSubModules: moduleHasSubModules,
+				Children:      []NavigationItemResponse{},
+			}
+		}
+
+		builder.moduleItem.Children = append(builder.moduleItem.Children, NavigationItemResponse{
 			Name: itemName,
 			Icon: itemIcon,
 			Path: path,
@@ -532,21 +583,17 @@ func loadNavigationModules(ctx context.Context, q queryer, scope string, scopeID
 	groups := make([]NavigationGroupResponse, 0, len(order))
 	for _, moduleID := range order {
 		builder := builders[moduleID]
-		if builder == nil {
+		if builder == nil || builder.moduleItem == nil {
 			continue
 		}
 
-		items := builder.items
-		if len(items) == 0 && builder.moduleItem != nil {
-			items = []NavigationItemResponse{*builder.moduleItem}
-		}
-		if len(items) == 0 {
+		if len(builder.moduleItem.Children) == 0 && strings.TrimSpace(builder.moduleItem.Path) == "" {
 			continue
 		}
 
 		groups = append(groups, NavigationGroupResponse{
-			Name:  builder.name,
-			Items: items,
+			Name:  builder.moduleItem.Name,
+			Items: []NavigationItemResponse{*builder.moduleItem},
 		})
 	}
 
@@ -667,6 +714,37 @@ func resolveBusinessContextID(ctx context.Context, q queryer, userID, activeBusi
 	}
 
 	return strings.TrimSpace(resolved), nil
+}
+
+func resolveBusinessLoginContextID(ctx context.Context, q queryer, userID, activeBusinessID string) (string, error) {
+	if trimmed := strings.TrimSpace(activeBusinessID); trimmed != "" {
+		return trimmed, nil
+	}
+
+	var count int
+	var firstBusinessID string
+	if err := q.QueryRow(ctx, `
+		SELECT COUNT(*), COALESCE(MIN(bm.business_id::text), '')
+		FROM business_managers bm
+		WHERE bm.user_id = $1
+	`, userID).Scan(&count, &firstBusinessID); err != nil {
+		return "", fmt.Errorf("resolve business login context: %w", err)
+	}
+
+	switch count {
+	case 0:
+		return "", &apiError{
+			Status:  http.StatusForbidden,
+			Message: "You need to be linked to a business to continue.",
+		}
+	case 1:
+		return strings.TrimSpace(firstBusinessID), nil
+	default:
+		return "", &apiError{
+			Status:  http.StatusForbidden,
+			Message: "Multiple businesses are linked to your account. Please select an active business first.",
+		}
+	}
 }
 
 func primaryRoleCode(roles []RoleResponse) string {
@@ -869,6 +947,10 @@ func clearSessionCookie(secure bool) *http.Cookie {
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
+}
+
+func (s *Service) ClearSessionCookie() *http.Cookie {
+	return clearSessionCookie(s.cookieSecure)
 }
 
 func readSessionCookie(req *http.Request) (string, bool) {

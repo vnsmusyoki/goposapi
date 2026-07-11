@@ -36,9 +36,11 @@ type ModuleResponse struct {
 }
 
 type NavigationItemResponse struct {
-	Name string `json:"name"`
-	Icon string `json:"icon,omitempty"`
-	Path string `json:"path"`
+	Name          string                   `json:"name"`
+	Icon          string                   `json:"icon,omitempty"`
+	Path          string                   `json:"path,omitempty"`
+	HasSubModules bool                     `json:"hasSubModules,omitempty"`
+	Children      []NavigationItemResponse `json:"children,omitempty"`
 }
 
 type NavigationGroupResponse struct {

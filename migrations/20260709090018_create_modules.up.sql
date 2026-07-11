@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS modules (
     description TEXT,
     icon VARCHAR(100),
     path VARCHAR(255),
+    has_sub_modules BOOLEAN NOT NULL DEFAULT TRUE,
+    access_level INTEGER  NOT NULL DEFAULT 1,
     role_id UUID NOT NULL
         REFERENCES roles(id)
         ON DELETE CASCADE,
@@ -30,7 +32,8 @@ CREATE TABLE IF NOT EXISTS sub_modules (
     code VARCHAR(100) NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    icon VARCHAR(100),
+    icon VARCHAR(100), 
+    access_level INTEGER  NOT NULL DEFAULT 1,
     sort_order INTEGER NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
