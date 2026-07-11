@@ -1,0 +1,14 @@
+ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS start_date DATE NULL,
+    ADD COLUMN IF NOT EXISTS default_profit_percentage NUMERIC(5,2) NULL,
+    ADD COLUMN IF NOT EXISTS currency VARCHAR(10) NULL,
+    ADD COLUMN IF NOT EXISTS currency_symbol_placement VARCHAR(20) NULL,
+    ADD COLUMN IF NOT EXISTS timezone VARCHAR(100) NULL,
+    ADD COLUMN IF NOT EXISTS logo_url TEXT NULL,
+    ADD COLUMN IF NOT EXISTS financial_year_start_month VARCHAR(20) NULL,
+    ADD COLUMN IF NOT EXISTS stock_accounting_method VARCHAR(50) NULL,
+    ADD COLUMN IF NOT EXISTS transaction_edit_days INTEGER NULL,
+    ADD COLUMN IF NOT EXISTS date_format VARCHAR(20) NULL,
+    ADD COLUMN IF NOT EXISTS time_format VARCHAR(20) NULL,
+    ADD COLUMN IF NOT EXISTS currency_precision INTEGER NULL,
+    ADD COLUMN IF NOT EXISTS quantity_precision INTEGER NULL;

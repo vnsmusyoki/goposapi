@@ -171,6 +171,221 @@ func CreateBusinessRepository(
 	}, nil
 }
 
+type SyncBusinessModulesResult struct {
+	BusinessID       string
+	InsertedModules  int
+	InsertedSubmodules int
+}
+
+type businessCatalogRow struct {
+	ID                string
+	Name              string
+	LegalName         string
+	EIN               string
+	Email             string
+	Phone             string
+	Website           string
+	Address           string
+	Industry          string
+	IsActive          bool
+	SubscriptionPlan  string
+	SubscriptionStatus string
+	MonthlyRevenue    float64
+	TotalUsers        int
+	TotalLocations    int
+	TotalProducts     int
+	TotalOrders       int
+	CreatedAt         time.Time
+	LastActive        sql.NullTime
+	ManagerCount      int
+}
+
+func ListBusinessesRepository(pool *pgxpool.Pool) ([]BusinessCatalogItem, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rows, err := pool.Query(ctx, `
+		WITH user_stats AS (
+			SELECT business_id, COUNT(*)::int AS total_users, MAX(last_login_at) AS last_login_at
+			FROM users
+			GROUP BY business_id
+		),
+		store_stats AS (
+			SELECT business_id, COUNT(*)::int AS total_locations
+			FROM stores
+			GROUP BY business_id
+		),
+		manager_stats AS (
+			SELECT business_id, COUNT(*)::int AS total_managers
+			FROM business_managers
+			GROUP BY business_id
+		),
+		recent_subscription AS (
+			SELECT DISTINCT ON (business_id)
+				business_id,
+				status,
+				package_id
+			FROM business_subscriptions
+			ORDER BY business_id, created_at DESC, id DESC
+		),
+		category_stats AS (
+			SELECT business_id, COUNT(*)::int AS total_categories
+			FROM product_categories
+			GROUP BY business_id
+		),
+		subcategory_stats AS (
+			SELECT business_id, COUNT(*)::int AS total_subcategories
+			FROM product_sub_categories
+			GROUP BY business_id
+		)
+		SELECT
+			b.id::text,
+			b.name,
+			COALESCE(NULLIF(b.owner_name, ''), b.name),
+			COALESCE(b.registration_number, ''),
+			COALESCE(b.business_email, ''),
+			COALESCE(b.business_phone, ''),
+			'' AS website,
+			'' AS address,
+			COALESCE(b.industry, ''),
+			b.is_active,
+			COALESCE(b.subscription_plan, 'free'),
+			COALESCE(rs.status, 'trialing'),
+			COALESCE(p.price, 0),
+			COALESCE(us.total_users, 0),
+			COALESCE(ss.total_locations, 0),
+			COALESCE(cs.total_categories, 0),
+			COALESCE(scs.total_subcategories, 0),
+			b.created_at,
+			COALESCE(us.last_login_at, b.updated_at),
+			COALESCE(ms.total_managers, 0)
+		FROM businesses b
+		LEFT JOIN user_stats us ON us.business_id = b.id
+		LEFT JOIN store_stats ss ON ss.business_id = b.id
+		LEFT JOIN manager_stats ms ON ms.business_id = b.id
+		LEFT JOIN recent_subscription rs ON rs.business_id = b.id
+		LEFT JOIN packages p ON p.id = rs.package_id
+		LEFT JOIN category_stats cs ON cs.business_id = b.id
+		LEFT JOIN subcategory_stats scs ON scs.business_id = b.id
+		ORDER BY b.created_at DESC, b.name ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list businesses: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]BusinessCatalogItem, 0)
+	for rows.Next() {
+		var row businessCatalogRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.Name,
+			&row.LegalName,
+			&row.EIN,
+			&row.Email,
+			&row.Phone,
+			&row.Website,
+			&row.Address,
+			&row.Industry,
+			&row.IsActive,
+			&row.SubscriptionPlan,
+			&row.SubscriptionStatus,
+			&row.MonthlyRevenue,
+			&row.TotalUsers,
+			&row.TotalLocations,
+			&row.TotalProducts,
+			&row.TotalOrders,
+			&row.CreatedAt,
+			&row.LastActive,
+			&row.ManagerCount,
+		); err != nil {
+			return nil, fmt.Errorf("scan business catalog row: %w", err)
+		}
+
+		flags := make([]string, 0, 4)
+		if row.ManagerCount == 0 {
+			flags = append(flags, "no-manager")
+		}
+		if row.TotalLocations == 0 {
+			flags = append(flags, "no-store")
+		}
+		if !row.IsActive {
+			flags = append(flags, "inactive-business")
+		}
+		if strings.EqualFold(row.SubscriptionStatus, "overdue") || strings.EqualFold(row.SubscriptionStatus, "canceled") {
+			flags = append(flags, "subscription-risk")
+		}
+
+		lastActive := row.CreatedAt.UTC()
+		if row.LastActive.Valid {
+			lastActive = row.LastActive.Time.UTC()
+		}
+
+		items = append(items, BusinessCatalogItem{
+			ID:                 row.ID,
+			Name:               row.Name,
+			LegalName:          row.LegalName,
+			EIN:                row.EIN,
+			Email:              row.Email,
+			Phone:              row.Phone,
+			Website:            row.Website,
+			Address:            row.Address,
+			Industry:           row.Industry,
+			Status:             deriveBusinessStatus(row.IsActive, row.SubscriptionStatus, row.ManagerCount),
+			Tier:               normalizeBusinessTier(row.SubscriptionPlan),
+			SubscriptionStatus: row.SubscriptionStatus,
+			TotalUsers:         row.TotalUsers,
+			TotalLocations:     row.TotalLocations,
+			TotalProducts:      row.TotalProducts,
+			TotalOrders:        row.TotalOrders,
+			MonthlyRevenue:     row.MonthlyRevenue,
+			CreatedAt:          row.CreatedAt.UTC().Format(time.RFC3339),
+			LastActive:         lastActive.Format(time.RFC3339),
+			IsVerified:         row.IsActive && row.ManagerCount > 0,
+			IsFeatured:         row.ManagerCount > 1,
+			Flags:              flags,
+			SupportTickets:     0,
+			ApiCalls:           0,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate businesses: %w", err)
+	}
+
+	return items, nil
+}
+
+func deriveBusinessStatus(isActive bool, subscriptionStatus string, managerCount int) string {
+	if !isActive {
+		return "suspended"
+	}
+
+	switch strings.ToLower(strings.TrimSpace(subscriptionStatus)) {
+	case "overdue", "canceled":
+		return "suspended"
+	case "trialing":
+		return "onboarding"
+	case "paid":
+		return "active"
+	}
+
+	if managerCount == 0 {
+		return "pending"
+	}
+
+	return "active"
+}
+
+func normalizeBusinessTier(plan string) string {
+	switch strings.ToLower(strings.TrimSpace(plan)) {
+	case "free", "pro", "premium", "enterprise":
+		return strings.ToLower(strings.TrimSpace(plan))
+	default:
+		return "free"
+	}
+}
+
 func businessEmailExists(ctx context.Context, q queryer, email string) (bool, error) {
 	var exists bool
 	if err := q.QueryRow(ctx, `
@@ -480,6 +695,116 @@ func assignBusinessModules(ctx context.Context, tx pgx.Tx, businessID string) er
 	}
 
 	return nil
+}
+
+func SyncBusinessModulesRepository(pool *pgxpool.Pool, businessID string) (*SyncBusinessModulesResult, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	businessID = strings.TrimSpace(businessID)
+	if businessID == "" {
+		return nil, ErrInvalidBusinessInput
+	}
+
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("begin sync business modules: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	var exists bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM businesses
+			WHERE id = $1
+		)
+	`, businessID).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("check business exists: %w", err)
+	}
+	if !exists {
+		return nil, ErrBusinessNotFound
+	}
+
+	modules, err := loadAssignableBusinessModules(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	insertedModules := 0
+	insertedSubmodules := 0
+	for _, module := range modules {
+		exists, err := businessModuleAssignmentExists(ctx, tx, businessID, module.ModuleID, module.SubModuleID)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			continue
+		}
+
+		if err := insertBusinessModuleAssignment(ctx, tx, businessID, module.ModuleID, module.SubModuleID); err != nil {
+			return nil, err
+		}
+		if module.SubModuleID.Valid {
+			insertedSubmodules++
+		} else {
+			insertedModules++
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit sync business modules: %w", err)
+	}
+
+	return &SyncBusinessModulesResult{
+		BusinessID:        businessID,
+		InsertedModules:   insertedModules,
+		InsertedSubmodules: insertedSubmodules,
+	}, nil
+}
+
+func loadAssignableBusinessModules(ctx context.Context, q queryer) ([]assignedModule, error) {
+	rows, err := q.Query(ctx, `
+		SELECT module_id::text, sub_module_id::text
+		FROM (
+			SELECT m.id AS module_id, NULL::uuid AS sub_module_id, m.sort_order AS module_order, 0 AS sub_order
+			FROM modules m
+			JOIN roles r ON r.id = m.role_id
+			WHERE r.code = 'business'
+			  AND m.is_active = TRUE
+
+			UNION ALL
+
+			SELECT m.id AS module_id, sm.id AS sub_module_id, m.sort_order AS module_order, sm.sort_order AS sub_order
+			FROM modules m
+			JOIN roles r ON r.id = m.role_id
+			JOIN sub_modules sm ON sm.module_id = m.id
+			WHERE r.code = 'business'
+			  AND m.is_active = TRUE
+			  AND sm.is_active = TRUE
+		) AS assigned_modules
+		ORDER BY module_order ASC, sub_order ASC, module_id ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("load assignable business modules: %w", err)
+	}
+	defer rows.Close()
+
+	modules := make([]assignedModule, 0)
+	for rows.Next() {
+		var module assignedModule
+		if err := rows.Scan(&module.ModuleID, &module.SubModuleID); err != nil {
+			return nil, fmt.Errorf("scan assignable business module: %w", err)
+		}
+		modules = append(modules, module)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate assignable business modules: %w", err)
+	}
+
+	return modules, nil
 }
 
 func businessModuleAssignmentExists(ctx context.Context, q queryer, businessID, moduleID string, subModuleID sql.NullString) (bool, error) {

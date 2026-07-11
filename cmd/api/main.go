@@ -8,6 +8,7 @@ import (
 	"pos/internal/database"
 	adminhandler "pos/internal/handlers/admin"
 	categoryhandler "pos/internal/handlers/business/category"
+	settingshandler "pos/internal/handlers/business/settings"
 	"pos/internal/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -44,6 +45,8 @@ func main() {
 	authService := auth.NewService(pool, conf.CookieSecure)
 	authService.RegisterRoutes(api.Group("/auth"))
 	api.POST("/businesses", adminhandler.CreateBusinessRequestHandler(pool))
+	api.GET("/admin/businesses", adminhandler.ListBusinessesRequestHandler(pool, authService))
+	api.POST("/admin/businesses/:id/sync-modules", adminhandler.SyncBusinessModulesRequestHandler(pool, authService))
 	api.POST("/packages", adminhandler.CreatePackageRequestHandler(pool))
 	api.GET("/admin/roles", adminhandler.ListRolesRequestHandler(pool, authService))
 	api.GET("/admin/modules", adminhandler.ListModulesRequestHandler(pool, authService))
@@ -54,6 +57,8 @@ func main() {
 	api.PATCH("/admin/modules/submodules/reorder", adminhandler.ReorderSubmodulesRequestHandler(pool))
 	api.POST("/categories", categoryhandler.CreateCategoryRequestHandler(pool, authService))
 	api.GET("/categories", categoryhandler.ListCategoriesRequestHandler(pool, authService))
+	api.GET("/business/settings", settingshandler.GetBusinessSettingsRequestHandler(pool, authService))
+	api.PUT("/business/settings", settingshandler.UpdateBusinessSettingsRequestHandler(pool, authService))
 
 	router.Run(":" + conf.Port)
 }

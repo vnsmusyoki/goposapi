@@ -40,6 +40,33 @@ type CreateBusinessResult struct {
 	CreatedUser  bool
 }
 
+type BusinessCatalogItem struct {
+	ID                string
+	Name              string
+	LegalName         string
+	EIN               string
+	Email             string
+	Phone             string
+	Website           string
+	Address           string
+	Industry          string
+	Status            string
+	Tier              string
+	SubscriptionStatus string
+	TotalUsers        int
+	TotalLocations    int
+	TotalProducts     int
+	TotalOrders       int
+	MonthlyRevenue    float64
+	CreatedAt         string
+	LastActive        string
+	IsVerified        bool
+	IsFeatured        bool
+	Flags             []string
+	SupportTickets    int
+	ApiCalls          int
+}
+
 type BusinessPackageInfo struct {
 	ID                    string
 	Slug                  string

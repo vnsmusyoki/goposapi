@@ -9,6 +9,8 @@ import (
 	"net/mail"
 	"strings"
 
+	"pos/internal/auth"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v4/pgxpool"
 	repoadmin "pos/internal/repository/admin"
@@ -39,6 +41,45 @@ type RegisterBusinessResponse struct {
 	BusinessName string `json:"business_name"`
 	ManagerID    string `json:"manager_id"`
 	Message      string `json:"message"`
+}
+
+type BusinessCatalogItemResponse struct {
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	LegalName          string   `json:"legalName"`
+	EIN                string   `json:"ein"`
+	Email              string   `json:"email"`
+	Phone              string   `json:"phone"`
+	Website            string   `json:"website"`
+	Address            string   `json:"address"`
+	Industry           string   `json:"industry"`
+	Status             string   `json:"status"`
+	Tier               string   `json:"tier"`
+	SubscriptionStatus string   `json:"subscriptionStatus"`
+	TotalUsers         int      `json:"totalUsers"`
+	TotalLocations     int      `json:"totalLocations"`
+	TotalProducts      int      `json:"totalProducts"`
+	TotalOrders        int      `json:"totalOrders"`
+	MonthlyRevenue     float64  `json:"monthlyRevenue"`
+	CreatedAt          string   `json:"createdAt"`
+	LastActive         string   `json:"lastActive"`
+	IsVerified         bool     `json:"isVerified"`
+	IsFeatured         bool     `json:"isFeatured"`
+	Flags              []string `json:"flags"`
+	SupportTickets     int      `json:"supportTickets"`
+	ApiCalls           int      `json:"apiCalls"`
+}
+
+type BusinessCatalogResponse struct {
+	Businesses []BusinessCatalogItemResponse `json:"businesses"`
+	Message    string                        `json:"message"`
+}
+
+type SyncBusinessModulesResponse struct {
+	BusinessID        string `json:"business_id"`
+	InsertedModules   int    `json:"inserted_modules"`
+	InsertedSubmodules int   `json:"inserted_submodules"`
+	Message           string `json:"message"`
 }
 
 func CreateBusinessRequestHandler(pool *pgxpool.Pool) gin.HandlerFunc {
@@ -135,6 +176,109 @@ func CreateBusinessRequestHandler(pool *pgxpool.Pool) gin.HandlerFunc {
 			BusinessName: result.BusinessName,
 			ManagerID:    result.ManagerID,
 			Message:      message,
+		})
+	}
+}
+
+func ListBusinessesRequestHandler(pool *pgxpool.Pool, authService *auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, _, err := authService.CurrentUserFromRequest(c.Request.Context(), c.Request)
+		if err != nil {
+			log.Printf("list businesses handler: auth lookup failed err=%v", err)
+			http.SetCookie(c.Writer, authService.ClearSessionCookie())
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Session expired. Please log in again."})
+			return
+		}
+
+		if !hasAdminRole(user.Roles) {
+			c.JSON(http.StatusForbidden, gin.H{"message": "Admin access is required"})
+			return
+		}
+
+		businesses, err := repoadmin.ListBusinessesRepository(pool)
+		if err != nil {
+			log.Printf("list businesses handler: repository failed err=%v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load businesses"})
+			return
+		}
+
+		response := make([]BusinessCatalogItemResponse, 0, len(businesses))
+		for _, business := range businesses {
+			response = append(response, BusinessCatalogItemResponse{
+				ID:                 business.ID,
+				Name:               business.Name,
+				LegalName:          business.LegalName,
+				EIN:                business.EIN,
+				Email:              business.Email,
+				Phone:              business.Phone,
+				Website:            business.Website,
+				Address:            business.Address,
+				Industry:           business.Industry,
+				Status:             business.Status,
+				Tier:               business.Tier,
+				SubscriptionStatus: business.SubscriptionStatus,
+				TotalUsers:         business.TotalUsers,
+				TotalLocations:     business.TotalLocations,
+				TotalProducts:      business.TotalProducts,
+				TotalOrders:        business.TotalOrders,
+				MonthlyRevenue:     business.MonthlyRevenue,
+				CreatedAt:          business.CreatedAt,
+				LastActive:         business.LastActive,
+				IsVerified:         business.IsVerified,
+				IsFeatured:         business.IsFeatured,
+				Flags:              business.Flags,
+				SupportTickets:     business.SupportTickets,
+				ApiCalls:           business.ApiCalls,
+			})
+		}
+
+		c.JSON(http.StatusOK, BusinessCatalogResponse{
+			Businesses: response,
+			Message:    "Businesses loaded successfully",
+		})
+	}
+}
+
+func SyncBusinessModulesRequestHandler(pool *pgxpool.Pool, authService *auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, _, err := authService.CurrentUserFromRequest(c.Request.Context(), c.Request)
+		if err != nil {
+			log.Printf("sync business modules handler: auth lookup failed err=%v", err)
+			http.SetCookie(c.Writer, authService.ClearSessionCookie())
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Session expired. Please log in again."})
+			return
+		}
+
+		if !hasAdminRole(user.Roles) {
+			c.JSON(http.StatusForbidden, gin.H{"message": "Admin access is required"})
+			return
+		}
+
+		businessID := strings.TrimSpace(c.Param("id"))
+		if businessID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Business id is required"})
+			return
+		}
+
+		result, err := repoadmin.SyncBusinessModulesRepository(pool, businessID)
+		if err != nil {
+			switch {
+			case errors.Is(err, repoadmin.ErrBusinessNotFound):
+				c.JSON(http.StatusNotFound, gin.H{"message": "Business not found"})
+			case errors.Is(err, repoadmin.ErrInvalidBusinessInput):
+				c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid business id"})
+			default:
+				log.Printf("sync business modules handler: repository failed business_id=%s err=%v", businessID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to sync business modules"})
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, SyncBusinessModulesResponse{
+			BusinessID:        result.BusinessID,
+			InsertedModules:   result.InsertedModules,
+			InsertedSubmodules: result.InsertedSubmodules,
+			Message:           "Business modules synced successfully",
 		})
 	}
 }
