@@ -1,0 +1,18 @@
+ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS sku_prefix VARCHAR(50) NULL,
+    ADD COLUMN IF NOT EXISTS enable_product_expiry BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS expiry_tracking_method VARCHAR(50) NULL,
+    ADD COLUMN IF NOT EXISTS expiry_selling_behavior VARCHAR(50) NULL,
+    ADD COLUMN IF NOT EXISTS stop_selling_days_before INTEGER NULL,
+    ADD COLUMN IF NOT EXISTS enable_brands BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS enable_categories BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS enable_sub_categories BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS enable_price_tax_info BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS default_unit VARCHAR(50) NULL,
+    ADD COLUMN IF NOT EXISTS enable_sub_units BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS enable_secondary_unit BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS enable_racks BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS enable_row BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS enable_position BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS enable_warranty BOOLEAN NULL,
+    ADD COLUMN IF NOT EXISTS default_credit_limit NUMERIC(12,2) NULL;

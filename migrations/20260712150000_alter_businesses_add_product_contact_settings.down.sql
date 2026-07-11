@@ -1,0 +1,18 @@
+ALTER TABLE businesses
+    DROP COLUMN IF EXISTS default_credit_limit,
+    DROP COLUMN IF EXISTS enable_warranty,
+    DROP COLUMN IF EXISTS enable_position,
+    DROP COLUMN IF EXISTS enable_row,
+    DROP COLUMN IF EXISTS enable_racks,
+    DROP COLUMN IF EXISTS enable_secondary_unit,
+    DROP COLUMN IF EXISTS enable_sub_units,
+    DROP COLUMN IF EXISTS default_unit,
+    DROP COLUMN IF EXISTS enable_price_tax_info,
+    DROP COLUMN IF EXISTS enable_sub_categories,
+    DROP COLUMN IF EXISTS enable_categories,
+    DROP COLUMN IF EXISTS enable_brands,
+    DROP COLUMN IF EXISTS stop_selling_days_before,
+    DROP COLUMN IF EXISTS expiry_selling_behavior,
+    DROP COLUMN IF EXISTS expiry_tracking_method,
+    DROP COLUMN IF EXISTS enable_product_expiry,
+    DROP COLUMN IF EXISTS sku_prefix;

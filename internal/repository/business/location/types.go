@@ -1,0 +1,44 @@
+package location
+
+type CreateBusinessLocationInput struct {
+	BusinessID               string
+	LocationID               string
+	LocationName             string
+	Landmark                 string
+	ExactAddress             string
+	City                     string
+	ZipCode                  string
+	State                    string
+	Country                  string
+	Latitude                 *float64
+	Longitude                *float64
+	Mobile                   string
+	AlternateContactNumber   string
+	Email                    string
+	Website                  string
+	InvoiceScheme            string
+	PosInvoiceLayout         string
+	SaleInvoiceLayout        string
+	DefaultSellingPriceGroup string
+	PaymentMethods           []string
+	KraPin                   string
+	TaxJurisdiction          string
+	IsVatRegistered          bool
+	VatNumber                string
+	DefaultTaxType           string
+	PricesIncludeTax         bool
+	IssueTaxInvoices         bool
+	TaxNote                  string
+	EtimsEnabled             bool
+	Environment              string
+	IntegrationType          string
+	IsHeadOfficeBranch       bool
+	KraBranchID              string
+	DeviceSerialNumber       string
+	CmcKey                   string
+	AutoSubmitInvoices       bool
+	AllowOfflineSales        bool
+	RetryFailedInvoices      bool
+	PrintQrCode              bool
+	PrintFiscalDetails       bool
+}

@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_business_locations_business_location_name;
