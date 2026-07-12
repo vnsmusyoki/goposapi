@@ -7,11 +7,14 @@ import (
 	"pos/internal/config"
 	"pos/internal/database"
 	adminhandler "pos/internal/handlers/admin"
+	brandhandler "pos/internal/handlers/business/brand"
 	categoryhandler "pos/internal/handlers/business/category"
 	locationhandler "pos/internal/handlers/business/location"
 	settingshandler "pos/internal/handlers/business/settings"
+	subcategoryhandler "pos/internal/handlers/business/subcategory"
 	supplierhandler "pos/internal/handlers/business/supplier"
 	unithandler "pos/internal/handlers/business/unit"
+	warrantyhandler "pos/internal/handlers/business/warranty"
 	"pos/internal/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -60,6 +63,20 @@ func main() {
 	api.PATCH("/admin/modules/submodules/reorder", adminhandler.ReorderSubmodulesRequestHandler(pool))
 	api.POST("/categories", categoryhandler.CreateCategoryRequestHandler(pool, authService))
 	api.GET("/categories", categoryhandler.ListCategoriesRequestHandler(pool, authService))
+	api.GET("/categories/export", categoryhandler.ExportCategoriesRequestHandler(pool, authService))
+	api.DELETE("/categories/:id", categoryhandler.DeleteCategoryRequestHandler(pool, authService))
+	api.GET("/brands", brandhandler.ListBrandsRequestHandler(pool, authService))
+	api.POST("/brands", brandhandler.CreateBrandRequestHandler(pool, authService))
+	api.PUT("/brands/:id", brandhandler.UpdateBrandRequestHandler(pool, authService))
+	api.DELETE("/brands/:id", brandhandler.DeleteBrandRequestHandler(pool, authService))
+	api.GET("/warranties", warrantyhandler.ListWarrantiesRequestHandler(pool, authService))
+	api.POST("/warranties", warrantyhandler.CreateWarrantyRequestHandler(pool, authService))
+	api.PUT("/warranties/:id", warrantyhandler.UpdateWarrantyRequestHandler(pool, authService))
+	api.DELETE("/warranties/:id", warrantyhandler.DeleteWarrantyRequestHandler(pool, authService))
+	api.GET("/sub-categories", subcategoryhandler.ListSubCategoriesRequestHandler(pool, authService))
+	api.POST("/sub-categories", subcategoryhandler.CreateSubCategoryRequestHandler(pool, authService))
+	api.PUT("/sub-categories/:id", subcategoryhandler.UpdateSubCategoryRequestHandler(pool, authService))
+	api.DELETE("/sub-categories/:id", subcategoryhandler.DeleteSubCategoryRequestHandler(pool, authService))
 	api.GET("/business/locations", locationhandler.GetBusinessLocationsRequestHandler(pool, authService))
 	api.POST("/business/locations", locationhandler.CreateBusinessLocationRequestHandler(pool, authService))
 	api.DELETE("/business/locations/:id", locationhandler.DeleteBusinessLocationRequestHandler(pool, authService))

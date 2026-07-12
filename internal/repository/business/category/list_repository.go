@@ -33,10 +33,14 @@ func ListCategoriesRepository(
 			COALESCE(meta_title, ''),
 			COALESCE(meta_description, ''),
 			COALESCE(image_url, ''),
+			active,
+			featured,
+			sort_order,
 			created_at::text,
 			updated_at::text
 		FROM product_categories
 		WHERE business_id = $1
+		  AND deleted_at IS NULL
 		ORDER BY created_at DESC, name ASC
 	`, businessID)
 	if err != nil {
@@ -56,6 +60,9 @@ func ListCategoriesRepository(
 			&category.MetaTitle,
 			&category.MetaDescription,
 			&category.ImageURL,
+			&category.Active,
+			&category.Featured,
+			&category.SortOrder,
 			&category.CreatedAt,
 			&category.UpdatedAt,
 		); err != nil {

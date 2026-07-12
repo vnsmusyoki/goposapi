@@ -1,9 +1,11 @@
 package category
 
 import (
+	"encoding/csv"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -91,9 +93,9 @@ func ListCategoriesRequestHandler(pool *pgxpool.Pool, authService *auth.Service)
 				ParentID:      nil,
 				Level:         0,
 				ProductCount:  0,
-				Active:        true,
-				Featured:      false,
-				SortOrder:     0,
+				Active:        category.Active,
+				Featured:      category.Featured,
+				SortOrder:     category.SortOrder,
 				CreatedAt:     category.CreatedAt,
 				UpdatedAt:     category.UpdatedAt,
 				CreatedBy:     "Current User",
@@ -105,6 +107,79 @@ func ListCategoriesRequestHandler(pool *pgxpool.Pool, authService *auth.Service)
 			Categories: responseCategories,
 			Message:    "Categories loaded successfully",
 		})
+	}
+}
+
+func ExportCategoriesRequestHandler(pool *pgxpool.Pool, authService *auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, _, err := authService.CurrentUserFromRequest(c.Request.Context(), c.Request)
+		if err != nil {
+			log.Printf("export categories handler: auth lookup failed err=%v", err)
+			http.SetCookie(c.Writer, authService.ClearSessionCookie())
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"message": "Session expired. Please log in again.",
+			})
+			return
+		}
+
+		if !hasBusinessRole(user.Roles) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"message": "Business access is required",
+			})
+			return
+		}
+
+		businessID := strings.TrimSpace(user.ActiveBusinessID)
+		if businessID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"message": "Active business is required.",
+			})
+			return
+		}
+
+		categories, err := repocategory.ListCategoriesRepository(pool, businessID)
+		if err != nil {
+			switch err {
+			case repocategory.ErrBusinessNotResolved:
+				c.JSON(http.StatusBadRequest, gin.H{
+					"message": "Active business is required.",
+				})
+			default:
+				log.Printf("export categories handler: repository failed business_id=%s err=%v", businessID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"message": "Failed to export categories",
+				})
+			}
+			return
+		}
+
+		filename := "categories_" + time.Now().Format("2006-01-02") + ".csv"
+		c.Header("Content-Type", "text/csv; charset=utf-8")
+		c.Header("Content-Disposition", "attachment; filename="+filename)
+		c.Header("Cache-Control", "no-store")
+		c.Status(http.StatusOK)
+
+		writer := csv.NewWriter(c.Writer)
+		defer writer.Flush()
+
+		if err := writer.Write([]string{"ID", "Category Code", "Name", "Description", "Created At", "Updated At"}); err != nil {
+			log.Printf("export categories handler: write header failed business_id=%s err=%v", businessID, err)
+			return
+		}
+
+		for _, category := range categories {
+			if err := writer.Write([]string{
+				category.ID,
+				category.CategoryCode,
+				category.Name,
+				category.Description,
+				category.CreatedAt,
+				category.UpdatedAt,
+			}); err != nil {
+				log.Printf("export categories handler: write row failed business_id=%s category_id=%s err=%v", businessID, category.ID, err)
+				return
+			}
+		}
 	}
 }
 
