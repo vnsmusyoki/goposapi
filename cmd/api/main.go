@@ -11,6 +11,7 @@ import (
 	categoryhandler "pos/internal/handlers/business/category"
 	locationhandler "pos/internal/handlers/business/location"
 	producthandler "pos/internal/handlers/business/product"
+	purchaseorderhandler "pos/internal/handlers/business/purchaseorder"
 	settingshandler "pos/internal/handlers/business/settings"
 	subcategoryhandler "pos/internal/handlers/business/subcategory"
 	supplierhandler "pos/internal/handlers/business/supplier"
@@ -93,6 +94,9 @@ func main() {
 	api.DELETE("/business/units/:id", unithandler.DeleteBusinessUnitRequestHandler(pool, authService))
 	api.GET("/business/suppliers", supplierhandler.ListBusinessSuppliersRequestHandler(pool, authService))
 	api.POST("/business/suppliers", supplierhandler.CreateBusinessSupplierRequestHandler(pool, authService))
+	api.GET("/purchases/orders", purchaseorderhandler.ListPurchaseOrdersRequestHandler(pool, authService))
+	api.POST("/purchases/orders", purchaseorderhandler.CreatePurchaseOrderRequestHandler(pool, authService))
+	api.DELETE("/purchases/orders/:id", purchaseorderhandler.DeletePurchaseOrderRequestHandler(pool, authService))
 	api.GET("/business/settings", settingshandler.GetBusinessSettingsRequestHandler(pool, authService))
 	api.PUT("/business/settings", settingshandler.UpdateBusinessSettingsRequestHandler(pool, authService))
 	api.GET("/business/settings/invoice", settingshandler.GetBusinessInvoiceSettingsRequestHandler(pool, authService))
