@@ -1,0 +1,43 @@
+CREATE TABLE IF NOT EXISTS business_suppliers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    supplier_type TEXT NOT NULL CHECK (supplier_type IN ('individual', 'business')),
+    contact_id TEXT NOT NULL,
+    prefix TEXT NOT NULL DEFAULT '',
+    first_name TEXT NOT NULL DEFAULT '',
+    middle_name TEXT NOT NULL DEFAULT '',
+    last_name TEXT NOT NULL DEFAULT '',
+    business_name TEXT NOT NULL DEFAULT '',
+    mobile TEXT NOT NULL,
+    alternate_contact_number TEXT NOT NULL DEFAULT '',
+    landline TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT '',
+    tax_number TEXT NOT NULL DEFAULT '',
+    opening_balance NUMERIC(14,2) NOT NULL DEFAULT 0,
+    pay_terms_type TEXT NOT NULL DEFAULT 'days' CHECK (pay_terms_type IN ('days', 'months')),
+    pay_terms_value INTEGER NOT NULL DEFAULT 0 CHECK (pay_terms_value >= 0),
+    address_line_1 TEXT NOT NULL DEFAULT '',
+    address_line_2 TEXT NOT NULL DEFAULT '',
+    city TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT '',
+    country TEXT NOT NULL DEFAULT '',
+    zip_code TEXT NOT NULL DEFAULT '',
+    website TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'pending', 'suspended')),
+    tier TEXT NOT NULL DEFAULT 'standard' CHECK (tier IN ('preferred', 'standard', 'vip', 'new')),
+    rating NUMERIC(3,2) NOT NULL DEFAULT 0,
+    total_purchases INTEGER NOT NULL DEFAULT 0,
+    total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+    outstanding_balance NUMERIC(14,2) NOT NULL DEFAULT 0,
+    lead_time INTEGER NOT NULL DEFAULT 0,
+    is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    is_featured BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (business_id, contact_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_business_suppliers_business_id ON business_suppliers (business_id);
+CREATE INDEX IF NOT EXISTS idx_business_suppliers_contact_id ON business_suppliers (business_id, contact_id);
+CREATE INDEX IF NOT EXISTS idx_business_suppliers_created_at ON business_suppliers (business_id, created_at DESC);

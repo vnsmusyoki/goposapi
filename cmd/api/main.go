@@ -10,6 +10,7 @@ import (
 	categoryhandler "pos/internal/handlers/business/category"
 	locationhandler "pos/internal/handlers/business/location"
 	settingshandler "pos/internal/handlers/business/settings"
+	supplierhandler "pos/internal/handlers/business/supplier"
 	"pos/internal/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -61,8 +62,14 @@ func main() {
 	api.GET("/business/locations", locationhandler.GetBusinessLocationsRequestHandler(pool, authService))
 	api.POST("/business/locations", locationhandler.CreateBusinessLocationRequestHandler(pool, authService))
 	api.DELETE("/business/locations/:id", locationhandler.DeleteBusinessLocationRequestHandler(pool, authService))
+	api.GET("/business/suppliers", supplierhandler.ListBusinessSuppliersRequestHandler(pool, authService))
+	api.POST("/business/suppliers", supplierhandler.CreateBusinessSupplierRequestHandler(pool, authService))
 	api.GET("/business/settings", settingshandler.GetBusinessSettingsRequestHandler(pool, authService))
 	api.PUT("/business/settings", settingshandler.UpdateBusinessSettingsRequestHandler(pool, authService))
+	api.GET("/business/settings/invoice", settingshandler.GetBusinessInvoiceSettingsRequestHandler(pool, authService))
+	api.POST("/business/settings/invoice", settingshandler.CreateBusinessInvoiceSettingsRequestHandler(pool, authService))
+	api.GET("/business/settings/invoice/:id", settingshandler.GetBusinessInvoiceSettingRequestHandler(pool, authService))
+	api.PUT("/business/settings/invoice/:id", settingshandler.UpdateBusinessInvoiceSettingsRequestHandler(pool, authService))
 	api.GET("/business/settings/product", settingshandler.GetBusinessProductSettingsRequestHandler(pool, authService))
 	api.PUT("/business/settings/product", settingshandler.UpdateBusinessProductSettingsRequestHandler(pool, authService))
 	api.GET("/business/settings/contact", settingshandler.GetBusinessContactSettingsRequestHandler(pool, authService))

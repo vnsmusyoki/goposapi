@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"pos/internal/auth"
+	"pos/internal/validation"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -76,10 +77,10 @@ type BusinessCatalogResponse struct {
 }
 
 type SyncBusinessModulesResponse struct {
-	BusinessID        string `json:"business_id"`
-	InsertedModules   int    `json:"inserted_modules"`
-	InsertedSubmodules int   `json:"inserted_submodules"`
-	Message           string `json:"message"`
+	BusinessID         string `json:"business_id"`
+	InsertedModules    int    `json:"inserted_modules"`
+	InsertedSubmodules int    `json:"inserted_submodules"`
+	Message            string `json:"message"`
 }
 
 func CreateBusinessRequestHandler(pool *pgxpool.Pool) gin.HandlerFunc {
@@ -123,7 +124,7 @@ func CreateBusinessRequestHandler(pool *pgxpool.Pool) gin.HandlerFunc {
 		result, err := repoadmin.CreateBusinessRepository(pool, repoadmin.CreateBusinessInput{
 			Name:               derefString(req.Name),
 			BusinessEmail:      derefString(req.BusinessEmail),
-			BusinessPhone:      derefString(req.BusinessPhone),
+			BusinessPhone:      validation.NormalizePhoneNumber(derefString(req.BusinessPhone)),
 			RegistrationNumber: derefString(req.RegistrationNumber),
 			Industry:           derefString(req.Industry),
 			OwnerName:          derefString(req.OwnerName),
@@ -275,10 +276,10 @@ func SyncBusinessModulesRequestHandler(pool *pgxpool.Pool, authService *auth.Ser
 		}
 
 		c.JSON(http.StatusOK, SyncBusinessModulesResponse{
-			BusinessID:        result.BusinessID,
-			InsertedModules:   result.InsertedModules,
+			BusinessID:         result.BusinessID,
+			InsertedModules:    result.InsertedModules,
 			InsertedSubmodules: result.InsertedSubmodules,
-			Message:           "Business modules synced successfully",
+			Message:            "Business modules synced successfully",
 		})
 	}
 }
@@ -318,6 +319,8 @@ func businessFieldErrors(req *RegisterBusinessRequest) map[string]string {
 
 	if req == nil || req.BusinessPhone == nil || strings.TrimSpace(*req.BusinessPhone) == "" {
 		errorsMap["business_phone"] = "Business phone is required."
+	} else if err := validation.ValidatePhoneNumber(*req.BusinessPhone, true); err != nil {
+		errorsMap["business_phone"] = "Business phone must start with 0 and contain 10 digits."
 	}
 
 	if req == nil || req.RegistrationNumber == nil || strings.TrimSpace(*req.RegistrationNumber) == "" {
@@ -363,6 +366,8 @@ func businessFieldErrors(req *RegisterBusinessRequest) map[string]string {
 		}
 		if req.Manager.Phone == nil || strings.TrimSpace(*req.Manager.Phone) == "" {
 			errorsMap["manager.phone"] = "Phone is required."
+		} else if err := validation.ValidatePhoneNumber(*req.Manager.Phone, true); err != nil {
+			errorsMap["manager.phone"] = "Phone must start with 0 and contain 10 digits."
 		}
 	} else if req == nil || req.ManagerID == nil || strings.TrimSpace(*req.ManagerID) == "" {
 		errorsMap["manager.username"] = "Username is required."
@@ -385,7 +390,7 @@ func toCreateBusinessManagerInput(req *RegisterBusinessManager) *repoadmin.Creat
 		Email:    derefString(req.Email),
 		Password: derefString(req.Password),
 		FullName: derefString(req.FullName),
-		Phone:    derefString(req.Phone),
+		Phone:    validation.NormalizePhoneNumber(derefString(req.Phone)),
 	}
 }
 

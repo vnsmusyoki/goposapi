@@ -15,6 +15,7 @@ import (
 	"pos/internal/auth"
 	"pos/internal/models"
 	repolocation "pos/internal/repository/business/location"
+	"pos/internal/validation"
 )
 
 type createBusinessLocationPayload struct {
@@ -184,8 +185,8 @@ func CreateBusinessLocationRequestHandler(pool *pgxpool.Pool, authService *auth.
 			Country:                  trimmedValueOrDefault(payload.Country, "Kenya"),
 			Latitude:                 latitude,
 			Longitude:                longitude,
-			Mobile:                   trimmedValue(payload.Mobile),
-			AlternateContactNumber:   trimmedValue(payload.AlternateContactNumber),
+			Mobile:                   validation.NormalizePhoneNumber(trimmedValue(payload.Mobile)),
+			AlternateContactNumber:   validation.NormalizePhoneNumber(trimmedValue(payload.AlternateContactNumber)),
 			Email:                    trimmedValue(payload.Email),
 			Website:                  trimmedValue(payload.Website),
 			InvoiceScheme:            trimmedValueOrDefault(payload.InvoiceScheme, "default"),
@@ -300,6 +301,13 @@ func locationFieldErrors(payload *createBusinessLocationPayload) map[string]stri
 	}
 	if payload == nil || payload.Mobile == nil || strings.TrimSpace(*payload.Mobile) == "" {
 		errs["mobile"] = "Mobile number is required."
+	} else if err := validation.ValidatePhoneNumber(*payload.Mobile, true); err != nil {
+		errs["mobile"] = "Mobile number must start with 0 and contain 10 digits."
+	}
+	if payload != nil && payload.AlternateContactNumber != nil && strings.TrimSpace(*payload.AlternateContactNumber) != "" {
+		if err := validation.ValidatePhoneNumber(*payload.AlternateContactNumber, false); err != nil {
+			errs["alternateContactNumber"] = "Alternate contact number must start with 0 and contain 10 digits."
+		}
 	}
 	if payload == nil || payload.KraPin == nil || strings.TrimSpace(*payload.KraPin) == "" {
 		errs["kraPin"] = "KRA PIN is required."
