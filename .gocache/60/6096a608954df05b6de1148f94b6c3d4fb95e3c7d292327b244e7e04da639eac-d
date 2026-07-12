@@ -1,0 +1,6 @@
+./category_repository.go
+./delete_repository.go
+./errors.go
+./list_repository.go
+./types.go
+./validation.go

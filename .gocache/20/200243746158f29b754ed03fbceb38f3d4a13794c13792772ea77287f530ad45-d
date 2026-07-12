@@ -1,0 +1,3 @@
+./errors.go
+./product_repository.go
+./types.go

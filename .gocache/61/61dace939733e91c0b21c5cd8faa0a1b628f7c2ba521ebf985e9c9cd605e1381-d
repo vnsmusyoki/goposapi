@@ -1,0 +1,5 @@
+./delete_repository.go
+./errors.go
+./list_repository.go
+./location_repository.go
+./types.go

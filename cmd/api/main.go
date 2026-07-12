@@ -10,6 +10,7 @@ import (
 	brandhandler "pos/internal/handlers/business/brand"
 	categoryhandler "pos/internal/handlers/business/category"
 	locationhandler "pos/internal/handlers/business/location"
+	producthandler "pos/internal/handlers/business/product"
 	settingshandler "pos/internal/handlers/business/settings"
 	subcategoryhandler "pos/internal/handlers/business/subcategory"
 	supplierhandler "pos/internal/handlers/business/supplier"
@@ -65,6 +66,12 @@ func main() {
 	api.GET("/categories", categoryhandler.ListCategoriesRequestHandler(pool, authService))
 	api.GET("/categories/export", categoryhandler.ExportCategoriesRequestHandler(pool, authService))
 	api.DELETE("/categories/:id", categoryhandler.DeleteCategoryRequestHandler(pool, authService))
+	api.POST("/products", producthandler.CreateProductRequestHandler(pool, authService))
+	api.GET("/products", producthandler.ListProductsRequestHandler(pool, authService))
+	api.GET("/products/search", producthandler.SearchProductsRequestHandler(pool, authService))
+	api.GET("/products/:id", producthandler.GetProductRequestHandler(pool, authService))
+	api.GET("/products/:id/price-history", producthandler.ListProductPriceHistoryRequestHandler(pool, authService))
+	api.PUT("/products/:id", producthandler.UpdateProductRequestHandler(pool, authService))
 	api.GET("/brands", brandhandler.ListBrandsRequestHandler(pool, authService))
 	api.POST("/brands", brandhandler.CreateBrandRequestHandler(pool, authService))
 	api.PUT("/brands/:id", brandhandler.UpdateBrandRequestHandler(pool, authService))

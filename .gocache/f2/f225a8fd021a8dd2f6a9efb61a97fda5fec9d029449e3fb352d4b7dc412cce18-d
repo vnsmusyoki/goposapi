@@ -1,0 +1,15 @@
+./contact_settings_repository.go
+./contact_settings_types.go
+./errors.go
+./invoice_settings_repository.go
+./invoice_settings_types.go
+./invoice_settings_validation.go
+./pos_settings_repository.go
+./product_settings_repository.go
+./product_settings_types.go
+./purchases_settings_repository.go
+./sale_pos_purchases_settings_types.go
+./sale_settings_repository.go
+./settings_repository.go
+./types.go
+./validation.go

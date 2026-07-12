@@ -1,0 +1,195 @@
+package product
+
+import "database/sql"
+
+type CreateProductImageInput struct {
+	Name      string
+	URL       string
+	IsPrimary bool
+}
+
+type CreateProductComboItemInput struct {
+	ProductID   string
+	ProductName string
+	SKU         string
+	Unit        string
+	Quantity    float64
+	PriceEach   float64
+	Subtotal    float64
+}
+
+type CreateProductVariantInput struct {
+	Name               string
+	SKU                string
+	Barcode            string
+	Cost               float64
+	Selling            float64
+	Stock              float64
+	ShowOptionalFields bool
+	Weight             string
+	Length             string
+	Width              string
+	Height             string
+	ImageName          string
+	ImageURL           string
+	ReorderLevel       *int
+	ExpiryDate         string
+	SupplierCode       string
+}
+
+type CreateProductInput struct {
+	BusinessID              string
+	Name                    string
+	SKU                     string
+	Barcode                 string
+	ProductType             string
+	UnitID                  string
+	SubUnitIDs              []string
+	BrandID                 string
+	CategoryID              string
+	SubCategoryID           string
+	LocationIDs             []string
+	AllLocations            bool
+	ManageStock             bool
+	AlertQuantity           *int
+	IsForSelling            bool
+	TaxType                 string
+	TaxRate                 float64
+	DefaultPurchasePrice    *float64
+	PurchasePriceExclusive  *float64
+	PurchasePriceInclusive  *float64
+	ProfitMargin            *float64
+	DefaultSellingPrice     *float64
+	Description             string
+	HasWarranty             bool
+	WarrantyDuration        string
+	WarrantyPeriod          string
+	WarrantyCoverage        string
+	BrochureName            string
+	BrochureURL             string
+	CurrencyCode            string
+	CurrencySymbolPlacement string
+	CurrencyPrecision       int
+	CreatedBy               string
+	Images                  []CreateProductImageInput
+	ComboItems              []CreateProductComboItemInput
+	Variants                []CreateProductVariantInput
+}
+
+type ProductImageItem struct {
+	ID        string
+	Name      string
+	URL       string
+	IsPrimary bool
+}
+
+type ProductComboItemItem struct {
+	ID          string
+	ProductID   string
+	ProductName string
+	SKU         string
+	Unit        string
+	Quantity    float64
+	PriceEach   float64
+	Subtotal    float64
+}
+
+type ProductVariantItem struct {
+	ID                 string
+	Name               string
+	SKU                string
+	Barcode            string
+	Cost               float64
+	Selling            float64
+	Stock              float64
+	ShowOptionalFields bool
+	Weight             string
+	Length             string
+	Width              string
+	Height             string
+	ImageName          string
+	ImageURL           string
+	ReorderLevel       *int
+	ExpiryDate         string
+	SupplierCode       string
+}
+
+type ProductDetail struct {
+	ID                      string
+	Name                    string
+	SKU                     *string
+	ImageURL                string
+	Barcode                 string
+	ProductType             string
+	UnitID                  string
+	UnitName                string
+	SubUnitIDs              []string
+	SubUnits                []ProductSubUnitItem
+	BrandID                 string
+	BrandName               string
+	CategoryID              string
+	CategoryName            string
+	SubCategoryID           string
+	SubCategoryName         string
+	LocationIDs             []string
+	LocationNames           []string
+	AllLocations            bool
+	ManageStock             bool
+	AlertQuantity           int
+	IsForSelling            bool
+	TaxType                 string
+	TaxRate                 float64
+	DefaultPurchasePrice    float64
+	PurchasePriceExclusive  float64
+	PurchasePriceInclusive  float64
+	ProfitMargin            float64
+	DefaultSellingPrice     float64
+	Description             string
+	HasWarranty             bool
+	WarrantyDuration        string
+	WarrantyPeriod          string
+	WarrantyCoverage        string
+	BrochureName            string
+	BrochureURL             string
+	CurrencyCode            string
+	CurrencySymbolPlacement string
+	CurrencyPrecision       int
+	Status                  string
+	CurrentStock            int
+	CurrentStockValue       float64
+	TotalUnitsSold          int
+	TotalUnitsTransferred   int
+	TotalUnitsAdjusted      int
+	CreatedAt               string
+	UpdatedAt               string
+	Images                  []ProductImageItem
+	ComboItems              []ProductComboItemItem
+	Variants                []ProductVariantItem
+}
+
+type ProductSubUnitItem struct {
+	ID   string
+	Name string
+}
+
+type ProductPriceHistoryItem struct {
+	ID            string
+	ProductID     string
+	BuyingPrice   float64
+	SellingPrice  float64
+	Reason        sql.NullString
+	ChangedByID   string
+	ChangedByName string
+	CreatedAt     string
+}
+
+type ListProductsFilters struct {
+	Search            string
+	ProductType       string
+	CategoryID        string
+	BrandID           string
+	UnitID            string
+	LocationID        string
+	TaxType           string
+	ShowNotForSelling bool
+}

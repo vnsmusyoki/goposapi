@@ -1,0 +1,17 @@
+./brands.go
+./business.go
+./business_contact_settings.go
+./business_invoice_settings.go
+./business_location.go
+./business_pos_settings.go
+./business_product_settings.go
+./business_purchases_settings.go
+./business_sale_settings.go
+./business_settings.go
+./business_supplier.go
+./business_unit.go
+./categories.go
+./packages.go
+./products.go
+./subcategories.go
+./warranties.go

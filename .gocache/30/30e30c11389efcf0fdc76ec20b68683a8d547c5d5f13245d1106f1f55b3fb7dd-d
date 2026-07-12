@@ -1,0 +1,7 @@
+./contact_settings_handler.go
+./invoice_settings_handler.go
+./pos_settings_handler.go
+./product_settings_handler.go
+./purchases_settings_handler.go
+./sale_settings_handler.go
+./settings_handler.go
