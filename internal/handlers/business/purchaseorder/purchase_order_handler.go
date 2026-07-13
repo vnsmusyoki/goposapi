@@ -285,7 +285,7 @@ func UpdatePurchaseOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Ser
 			return
 		}
 
-		existing, err := repopurchaseorder.GetPurchaseOrderByIDRepository(pool, businessID, purchaseOrderID)
+		detail, err := repopurchaseorder.GetPurchaseOrderDetailRepository(pool, businessID, purchaseOrderID)
 		if err != nil {
 			switch err {
 			case repopurchaseorder.ErrBusinessNotResolved:
@@ -300,6 +300,7 @@ func UpdatePurchaseOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Ser
 			}
 			return
 		}
+		existing := &detail.PurchaseOrder
 
 		items := make([]repopurchaseorder.CreatePurchaseOrderItemInput, 0, len(payload.Items))
 		for _, item := range payload.Items {
@@ -348,7 +349,13 @@ func UpdatePurchaseOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Ser
 
 		purchaseOrderID = strings.TrimSpace(purchaseOrderID)
 		nextStatus := strings.ToLower(strings.TrimSpace(derefString(payload.Status)))
-		if err := validatePurchaseOrderStatusTransition(existing.Status, nextStatus); err != nil {
+		if err := validatePurchaseOrderStatusTransition(pool, businessID, existing.Status, nextStatus); err != nil {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"status": err.Error(),
+			}))
+			return
+		}
+		if err := validatePurchaseOrderCompletion(detail.Items, items, nextStatus); err != nil {
 			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
 				"status": err.Error(),
 			}))
@@ -359,12 +366,6 @@ func UpdatePurchaseOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Ser
 		nextDeliveryStatus := strings.ToLower(strings.TrimSpace(derefString(payload.DeliveryStatus)))
 		if statusChanged {
 			nextDeliveryStatus = derivePurchaseOrderDeliveryStatus(nextStatus)
-		}
-		if statusChanged && statusChangeReason == "" {
-			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
-				"status_change_reason": "Please provide a reason for the status change.",
-			}))
-			return
 		}
 
 		note := buildPurchaseOrderUpdateNote(existing.ReferenceNumber, user.FullName, *existing, repopurchaseorder.PurchaseOrder{
@@ -805,7 +806,7 @@ func derivePurchaseOrderDeliveryStatus(orderStatus string) string {
 	}
 }
 
-func validatePurchaseOrderStatusTransition(previousStatus, nextStatus string) error {
+func validatePurchaseOrderStatusTransition(pool *pgxpool.Pool, businessID, previousStatus, nextStatus string) error {
 	prev := strings.ToLower(strings.TrimSpace(previousStatus))
 	next := strings.ToLower(strings.TrimSpace(nextStatus))
 
@@ -813,25 +814,71 @@ func validatePurchaseOrderStatusTransition(previousStatus, nextStatus string) er
 		return nil
 	}
 
-	allowed := map[string][]string{
-		"draft":              {"pending_approval", "approved", "cancelled"},
-		"pending_approval":   {"approved", "cancelled"},
-		"approved":           {"ordered", "cancelled"},
-		"ordered":            {"partially_received", "received", "cancelled"},
-		"partially_received": {"received", "cancelled"},
-		"received":           {"completed", "closed", "cancelled"},
-		"completed":          {"closed"},
-		"cancelled":          {},
-		"closed":             {},
+	statuses, err := repopurchaseorder.ListPurchaseOrderStatusesRepository(pool, businessID)
+	if err != nil {
+		return fmt.Errorf("load purchase order statuses: %w", err)
 	}
 
-	for _, candidate := range allowed[prev] {
-		if candidate == next {
-			return nil
+	var prevStatus, nextStatusDef *repopurchaseorder.PurchaseOrderStatusDefinition
+	for idx := range statuses {
+		status := &statuses[idx]
+		switch {
+		case strings.EqualFold(status.Code, prev):
+			prevStatus = status
+		case strings.EqualFold(status.Code, next):
+			nextStatusDef = status
 		}
 	}
 
-	return fmt.Errorf("cannot change purchase order status from %s to %s", humanizePurchaseOrderState(prev), humanizePurchaseOrderState(next))
+	if prevStatus == nil || nextStatusDef == nil {
+		return fmt.Errorf("purchase order status definition not found")
+	}
+
+	if nextStatusDef.SortOrder < prevStatus.SortOrder {
+		return fmt.Errorf("please select the same status or a higher-ranked status")
+	}
+
+	return nil
+}
+
+func validatePurchaseOrderCompletion(existingItems []repopurchaseorder.PurchaseOrderItem, items []repopurchaseorder.CreatePurchaseOrderItemInput, nextStatus string) error {
+	if strings.ToLower(strings.TrimSpace(nextStatus)) != "completed" {
+		return nil
+	}
+
+	itemsByProductID := make(map[string]repopurchaseorder.CreatePurchaseOrderItemInput, len(items))
+	for _, item := range items {
+		productID := strings.ToLower(strings.TrimSpace(item.ProductID))
+		if productID == "" {
+			continue
+		}
+		itemsByProductID[productID] = item
+	}
+
+	incompleteProducts := make([]string, 0)
+	for _, existingItem := range existingItems {
+		productID := strings.ToLower(strings.TrimSpace(existingItem.ProductID))
+		if productID == "" {
+			continue
+		}
+
+		targetQuantity := existingItem.OrderQuantity
+		if payloadItem, ok := itemsByProductID[productID]; ok && payloadItem.ReceivedQuantity != nil {
+			targetQuantity = *payloadItem.ReceivedQuantity
+		} else if existingItem.ReceivedQuantity != nil {
+			targetQuantity = *existingItem.ReceivedQuantity
+		}
+
+		if targetQuantity < existingItem.OrderQuantity {
+			incompleteProducts = append(incompleteProducts, existingItem.ProductName)
+		}
+	}
+
+	if len(incompleteProducts) > 0 {
+		return fmt.Errorf("completed status is only allowed when all items are fully supplied. Still pending: %s", strings.Join(incompleteProducts, ", "))
+	}
+
+	return nil
 }
 
 func buildPurchaseOrderResponseMessage(status string, reminderChannels []string) string {

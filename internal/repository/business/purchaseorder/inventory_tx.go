@@ -23,7 +23,7 @@ type inventoryBalanceSnapshot struct {
 
 type inventoryBatchSnapshot struct {
 	ID                string
-	QuantityRemaining  float64
+	QuantityRemaining float64
 }
 
 func statusAffectsInventory(note string) bool {
@@ -88,6 +88,10 @@ func syncPurchaseOrderInventoryTx(
 			nextReceived = item.OrderQuantity
 		}
 
+		if previousReceived == 0 && nextReceived == 0 {
+			continue
+		}
+
 		reverseQty := 0.0
 		applyQty := 0.0
 
@@ -116,6 +120,7 @@ func syncPurchaseOrderInventoryTx(
 				PurchaseOrderID: req.PurchaseOrderID,
 				ReferenceNumber: req.ReferenceNumber,
 				LocationID:      prevLocationID,
+				SupplierID:      req.SupplierID,
 				ProductID:       productID,
 				QuantityDelta:   -reverseQty,
 				UnitCost:        item.UnitCostBeforeTax,
@@ -134,6 +139,7 @@ func syncPurchaseOrderInventoryTx(
 				PurchaseOrderID: req.PurchaseOrderID,
 				ReferenceNumber: req.ReferenceNumber,
 				LocationID:      nextLocationID,
+				SupplierID:      req.SupplierID,
 				ProductID:       productID,
 				QuantityDelta:   applyQty,
 				UnitCost:        item.UnitCostBeforeTax,
@@ -152,9 +158,10 @@ func syncPurchaseOrderInventoryTx(
 
 type inventoryDeltaInput struct {
 	BusinessID      string
-	PurchaseOrderID  string
+	PurchaseOrderID string
 	ReferenceNumber string
 	LocationID      string
+	SupplierID      string
 	ProductID       string
 	QuantityDelta   float64
 	UnitCost        float64
@@ -169,6 +176,7 @@ func applyInventoryDeltaTx(ctx context.Context, tx purchaseOrderInventoryTx, req
 	req.PurchaseOrderID = strings.TrimSpace(req.PurchaseOrderID)
 	req.ReferenceNumber = strings.TrimSpace(req.ReferenceNumber)
 	req.LocationID = strings.TrimSpace(req.LocationID)
+	req.SupplierID = strings.TrimSpace(req.SupplierID)
 	req.ProductID = strings.TrimSpace(req.ProductID)
 	req.LotNumber = strings.TrimSpace(req.LotNumber)
 	req.ExpiryDate = strings.TrimSpace(req.ExpiryDate)
@@ -191,21 +199,21 @@ func applyInventoryDeltaTx(ctx context.Context, tx purchaseOrderInventoryTx, req
 		}
 
 		return insertStockMovementTx(ctx, tx, inventoryMovementInput{
-			BusinessID:          req.BusinessID,
-			PurchaseOrderID:     req.PurchaseOrderID,
-			ReferenceNumber:     req.ReferenceNumber,
-			LocationID:          req.LocationID,
-			ProductID:           req.ProductID,
-			InventoryBalanceID:  balance.ID,
-			InventoryBatchID:    batchID,
-			MovementType:        "purchase_receipt",
-			QuantityIn:          req.QuantityDelta,
-			QuantityOut:         0,
-			UnitCost:            req.UnitCost,
-			StockBefore:         balance.QuantityAvailable,
-			StockAfter:          balance.QuantityAvailable + req.QuantityDelta,
-			Note:                req.Note,
-			PerformedBy:         req.PerformedBy,
+			BusinessID:         req.BusinessID,
+			PurchaseOrderID:    req.PurchaseOrderID,
+			ReferenceNumber:    req.ReferenceNumber,
+			LocationID:         req.LocationID,
+			ProductID:          req.ProductID,
+			InventoryBalanceID: balance.ID,
+			InventoryBatchID:   batchID,
+			MovementType:       "purchase_receipt",
+			QuantityIn:         req.QuantityDelta,
+			QuantityOut:        0,
+			UnitCost:           req.UnitCost,
+			StockBefore:        balance.QuantityAvailable,
+			StockAfter:         balance.QuantityAvailable + req.QuantityDelta,
+			Note:               req.Note,
+			PerformedBy:        req.PerformedBy,
 		})
 	}
 
@@ -305,6 +313,7 @@ func insertInventoryBatchTx(ctx context.Context, tx purchaseOrderInventoryTx, re
 			business_id,
 			product_id,
 			location_id,
+			supplier_id,
 			source_type,
 			source_id,
 			lot_number,
@@ -322,21 +331,22 @@ func insertInventoryBatchTx(ctx context.Context, tx purchaseOrderInventoryTx, re
 			$1::uuid,
 			$2::uuid,
 			$3::uuid,
+			NULLIF($4, '')::uuid,
 			'purchase_order',
-			$4::uuid,
-			$5,
+			$5::uuid,
 			$6,
 			$7,
 			$8,
 			$9,
-			$9,
+			$10,
+			$10,
 			CURRENT_TIMESTAMP,
-			NULLIF($10, '')::uuid,
+			NULLIF($11, '')::uuid,
 			CURRENT_TIMESTAMP,
 			CURRENT_TIMESTAMP
 		)
 		RETURNING id::text
-	`, req.BusinessID, req.ProductID, req.LocationID, req.PurchaseOrderID, req.LotNumber, req.ReferenceNumber, expiry, req.UnitCost, req.QuantityDelta, req.PerformedBy).Scan(&batchID); err != nil {
+	`, req.BusinessID, req.ProductID, req.LocationID, req.SupplierID, req.PurchaseOrderID, req.LotNumber, req.ReferenceNumber, expiry, req.UnitCost, req.QuantityDelta, req.PerformedBy).Scan(&batchID); err != nil {
 		return "", fmt.Errorf("insert inventory batch: %w", err)
 	}
 	_ = inventoryBalanceID

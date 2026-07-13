@@ -216,6 +216,7 @@ func CreatePurchaseOrderRepository(pool *pgxpool.Pool, req CreatePurchaseOrderIn
 		} else if balanceQuantity <= 0 {
 			receivedStatus = "received"
 		}
+		discountPercentage, discountAmount, normalizedUnitCostBeforeTax := derivePurchaseOrderItemDiscount(item.UnitCostBeforeDiscount, item.UnitCostBeforeTax)
 
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO purchase_order_items (
@@ -269,7 +270,7 @@ func CreatePurchaseOrderRepository(pool *pgxpool.Pool, req CreatePurchaseOrderIn
 				$22,
 				$23
 			)
-		`, item.PurchaseOrderID, req.BusinessID, item.ProductID, productName, sku, unitName, item.OrderQuantity, item.UnitCostBeforeDiscount, item.DiscountPercentage, item.DiscountAmount, item.UnitCostBeforeTax, item.ProductTaxRate, item.TaxAmount, item.NetCost, item.SellingPrice, item.LineCost, item.ManufactureDate, item.ExpiryDate, item.LotNumber, receivedQuantity, balanceQuantity, receivedStatus, idx); err != nil {
+		`, item.PurchaseOrderID, req.BusinessID, item.ProductID, productName, sku, unitName, item.OrderQuantity, item.UnitCostBeforeDiscount, discountPercentage, discountAmount, normalizedUnitCostBeforeTax, item.ProductTaxRate, item.TaxAmount, item.NetCost, item.SellingPrice, item.LineCost, item.ManufactureDate, item.ExpiryDate, item.LotNumber, receivedQuantity, balanceQuantity, receivedStatus, idx); err != nil {
 			return nil, fmt.Errorf("insert purchase order item: %w", err)
 		}
 	}
@@ -514,6 +515,7 @@ func UpdatePurchaseOrderRepository(pool *pgxpool.Pool, req UpdatePurchaseOrderIn
 		} else if balanceQuantity <= 0 {
 			receivedStatus = "received"
 		}
+		discountPercentage, discountAmount, normalizedUnitCostBeforeTax := derivePurchaseOrderItemDiscount(item.UnitCostBeforeDiscount, item.UnitCostBeforeTax)
 
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO purchase_order_items (
@@ -567,7 +569,7 @@ func UpdatePurchaseOrderRepository(pool *pgxpool.Pool, req UpdatePurchaseOrderIn
 				$22,
 				$23
 			)
-		`, req.PurchaseOrderID, req.BusinessID, item.ProductID, productName, sku, unitName, item.OrderQuantity, item.UnitCostBeforeDiscount, item.DiscountPercentage, item.DiscountAmount, item.UnitCostBeforeTax, item.ProductTaxRate, item.TaxAmount, item.NetCost, item.SellingPrice, item.LineCost, item.ManufactureDate, item.ExpiryDate, item.LotNumber, receivedQuantity, balanceQuantity, receivedStatus, idx); err != nil {
+		`, req.PurchaseOrderID, req.BusinessID, item.ProductID, productName, sku, unitName, item.OrderQuantity, item.UnitCostBeforeDiscount, discountPercentage, discountAmount, normalizedUnitCostBeforeTax, item.ProductTaxRate, item.TaxAmount, item.NetCost, item.SellingPrice, item.LineCost, item.ManufactureDate, item.ExpiryDate, item.LotNumber, receivedQuantity, balanceQuantity, receivedStatus, idx); err != nil {
 			return nil, fmt.Errorf("insert purchase order item: %w", err)
 		}
 	}
@@ -645,6 +647,33 @@ func UpdatePurchaseOrderRepository(pool *pgxpool.Pool, req UpdatePurchaseOrderIn
 	}
 
 	return updated, nil
+}
+
+func derivePurchaseOrderItemDiscount(unitCostBeforeDiscount, unitCostBeforeTax float64) (float64, float64, float64) {
+	beforeDiscount := unitCostBeforeDiscount
+	if beforeDiscount < 0 {
+		beforeDiscount = 0
+	}
+
+	beforeTax := unitCostBeforeTax
+	if beforeTax < 0 {
+		beforeTax = 0
+	}
+	if beforeTax > beforeDiscount {
+		beforeTax = beforeDiscount
+	}
+
+	discountAmount := beforeDiscount - beforeTax
+	if discountAmount < 0 {
+		discountAmount = 0
+	}
+
+	discountPercentage := 0.0
+	if beforeDiscount > 0 {
+		discountPercentage = (discountAmount / beforeDiscount) * 100
+	}
+
+	return discountPercentage, discountAmount, beforeTax
 }
 
 func DeletePurchaseOrderRepository(pool *pgxpool.Pool, businessID, purchaseOrderID, actionedBy string) error {

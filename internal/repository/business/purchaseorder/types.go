@@ -101,6 +101,43 @@ type PurchaseOrderLocationDetails struct {
 	Address string `json:"address"`
 }
 
+type PurchaseReturnableStockBatch struct {
+	ID                     string  `json:"id"`
+	ProductID              string  `json:"productId"`
+	ProductName            string  `json:"productName"`
+	SKU                    string  `json:"sku"`
+	SupplierID             string  `json:"supplierId"`
+	SupplierName           string  `json:"supplierName"`
+	LocationID             string  `json:"locationId"`
+	LocationName           string  `json:"locationName"`
+	LotNumber              string  `json:"lotNumber"`
+	BatchNumber            string  `json:"batchNumber"`
+	ExpiryDate             *string `json:"expiryDate"`
+	SuppliedBySupplier     float64 `json:"suppliedBySupplier"`
+	SoldAlreadyForSupplier float64 `json:"soldAlreadyForSupplier"`
+	AvailableQuantity      float64 `json:"availableQuantity"`
+	UnitPrice              float64 `json:"unitPrice"`
+	UnitCostBeforeTax      float64 `json:"unitCostBeforeTax"`
+	CurrentStock           float64 `json:"currentStock"`
+	ReceivedAt             string  `json:"receivedAt"`
+	SourceReference        string  `json:"sourceReference"`
+	SourceID               string  `json:"sourceId"`
+}
+
+type PurchaseReturnableStockGroup struct {
+	GroupKey               string  `json:"groupKey"`
+	ProductID              string  `json:"productId"`
+	ProductName            string  `json:"productName"`
+	SKU                    string  `json:"sku"`
+	SupplierID             string  `json:"supplierId"`
+	SupplierName           string  `json:"supplierName"`
+	LocationName           string  `json:"locationName"`
+	SuppliedBySupplier     float64 `json:"suppliedBySupplier"`
+	SoldAlreadyForSupplier float64 `json:"soldAlreadyForSupplier"`
+	AvailableQuantity      float64 `json:"availableQuantity"`
+	UnitPrice              float64 `json:"unitPrice"`
+}
+
 type PurchaseOrderDetail struct {
 	PurchaseOrder
 	Supplier   PurchaseOrderSupplierDetails `json:"supplier"`
