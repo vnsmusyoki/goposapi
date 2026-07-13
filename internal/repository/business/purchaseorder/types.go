@@ -168,6 +168,7 @@ type PurchaseOrderItem struct {
 	ManufactureDate        string   `json:"manufactureDate"`
 	ExpiryDate             string   `json:"expiryDate"`
 	LotNumber              string   `json:"lotNumber"`
+	CurrentStock           float64  `json:"currentStock"`
 	ReceivedQuantity       *float64 `json:"receivedQuantity,omitempty"`
 	BalanceQuantity        float64  `json:"balanceQuantity"`
 	ItemsReceived          float64  `json:"itemsReceived"`

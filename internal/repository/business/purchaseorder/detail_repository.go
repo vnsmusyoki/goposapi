@@ -211,38 +211,47 @@ func listPurchaseOrderItemsByOrderID(ctx context.Context, querier interface {
 }, businessID, purchaseOrderID string) ([]PurchaseOrderItem, error) {
 	rows, err := querier.Query(ctx, `
 		SELECT
-			id::text,
-			COALESCE(purchase_order_id::text, ''),
-			business_id::text,
-			product_id::text,
-			product_name,
-			sku,
-			unit,
-			order_quantity,
-			unit_cost_before_discount,
-			discount_percentage,
-			discount_amount,
-			unit_cost_before_tax,
-			product_tax_rate,
-			tax_amount,
-			net_cost,
-			selling_price,
-			line_cost,
-			COALESCE(manufacture_date::text, ''),
-			COALESCE(expiry_date::text, ''),
-			COALESCE(lot_number, ''),
-			COALESCE(balance_quantity, order_quantity),
-			received_quantity,
-			items_received,
-			received_status,
-			sort_order,
-			created_at::text,
-			updated_at::text
+			purchase_order_items.id::text,
+			COALESCE(purchase_order_items.purchase_order_id::text, ''),
+			purchase_order_items.business_id::text,
+			purchase_order_items.product_id::text,
+			purchase_order_items.product_name,
+			purchase_order_items.sku,
+			purchase_order_items.unit,
+			purchase_order_items.order_quantity,
+			purchase_order_items.unit_cost_before_discount,
+			purchase_order_items.discount_percentage,
+			purchase_order_items.discount_amount,
+			purchase_order_items.unit_cost_before_tax,
+			purchase_order_items.product_tax_rate,
+			purchase_order_items.tax_amount,
+			purchase_order_items.net_cost,
+			purchase_order_items.selling_price,
+			purchase_order_items.line_cost,
+			COALESCE(purchase_order_items.manufacture_date::text, ''),
+			COALESCE(purchase_order_items.expiry_date::text, ''),
+			COALESCE(purchase_order_items.lot_number, ''),
+			COALESCE(ib.quantity_available, 0),
+			COALESCE(purchase_order_items.balance_quantity, purchase_order_items.order_quantity),
+			purchase_order_items.received_quantity,
+			purchase_order_items.items_received,
+			purchase_order_items.received_status,
+			purchase_order_items.sort_order,
+			purchase_order_items.created_at::text,
+			purchase_order_items.updated_at::text
 		FROM purchase_order_items
-		WHERE business_id = $1
-		  AND purchase_order_id = $2::uuid
-		  AND deleted_at IS NULL
-		ORDER BY sort_order ASC, created_at ASC
+		LEFT JOIN purchase_orders po
+		  ON po.id = purchase_order_items.purchase_order_id
+		 AND po.business_id = purchase_order_items.business_id
+		 AND po.deleted_at IS NULL
+		LEFT JOIN inventory_balances ib
+		  ON ib.business_id = purchase_order_items.business_id
+		 AND ib.product_id = purchase_order_items.product_id
+		 AND ib.location_id = po.location_id
+		WHERE purchase_order_items.business_id = $1
+		  AND purchase_order_items.purchase_order_id = $2::uuid
+		  AND purchase_order_items.deleted_at IS NULL
+		ORDER BY purchase_order_items.sort_order ASC, purchase_order_items.created_at ASC
 	`, businessID, purchaseOrderID)
 	if err != nil {
 		return nil, fmt.Errorf("load purchase order items: %w", err)
@@ -484,6 +493,7 @@ func scanPurchaseOrderItem(scanner interface {
 		item          PurchaseOrderItem
 		purchaseOrder sql.NullString
 		expiryDate    sql.NullString
+		currentStock  sql.NullFloat64
 		receivedQty   sql.NullFloat64
 	)
 
@@ -508,6 +518,7 @@ func scanPurchaseOrderItem(scanner interface {
 		&item.ManufactureDate,
 		&expiryDate,
 		&item.LotNumber,
+		&currentStock,
 		&item.BalanceQuantity,
 		&receivedQty,
 		&item.ItemsReceived,
@@ -524,6 +535,9 @@ func scanPurchaseOrderItem(scanner interface {
 	}
 	if expiryDate.Valid {
 		item.ExpiryDate = expiryDate.String
+	}
+	if currentStock.Valid {
+		item.CurrentStock = currentStock.Float64
 	}
 	if receivedQty.Valid {
 		value := receivedQty.Float64
