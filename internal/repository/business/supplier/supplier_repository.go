@@ -24,6 +24,7 @@ func ListBusinessSuppliersRepository(pool *pgxpool.Pool, businessID string) ([]m
 
 	rows, err := pool.Query(ctx, supplierSelectQuery()+`
 		WHERE business_id = $1
+		  AND deleted_at IS NULL
 		ORDER BY created_at DESC, business_name ASC, first_name ASC, last_name ASC
 	`, businessID)
 	if err != nil {
@@ -145,6 +146,7 @@ func GetBusinessSupplierRepository(pool *pgxpool.Pool, businessID, contactID str
 	row := pool.QueryRow(ctx, supplierSelectQuery()+`
 		WHERE business_id = $1
 		  AND contact_id = $2
+		  AND deleted_at IS NULL
 		LIMIT 1
 	`, businessID, contactID)
 
@@ -167,6 +169,7 @@ func businessSupplierContactExists(ctx context.Context, pool *pgxpool.Pool, busi
 			FROM business_suppliers
 			WHERE business_id = $1
 			  AND contact_id = $2
+			  AND deleted_at IS NULL
 		)
 	`, businessID, contactID).Scan(&exists)
 	if err != nil {
