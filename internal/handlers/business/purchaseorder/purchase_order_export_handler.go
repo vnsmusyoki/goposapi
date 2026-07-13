@@ -17,6 +17,18 @@ import (
 	repopurchaseorder "pos/internal/repository/business/purchaseorder"
 )
 
+type sendPurchaseOrderNotificationRequest struct {
+	NotificationMode     string   `json:"notification_mode"`
+	EmailTo              []string `json:"email_to"`
+	EmailCc              []string `json:"email_cc"`
+	EmailBcc             []string `json:"email_bcc"`
+	EmailSubject         string   `json:"email_subject"`
+	EmailMessage         string   `json:"email_message"`
+	SmsWhatsappReceivers []string `json:"sms_whatsapp_receivers"`
+	SmsWhatsappMessage   string   `json:"sms_whatsapp_message"`
+	Note                 string   `json:"note"`
+}
+
 type purchaseOrderExportColumn struct {
 	Key   string
 	Label string
@@ -296,9 +308,107 @@ func SendPurchaseOrderNotificationRequestHandler(pool *pgxpool.Pool, authService
 			return
 		}
 
-		log.Printf("purchase order notification queued business_id=%s order_id=%s reference=%s", businessID, order.ID, order.ReferenceNumber)
+		var req sendPurchaseOrderNotificationRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"form": "Invalid notification payload.",
+			}))
+			return
+		}
+
+		notificationMode := strings.ToLower(strings.TrimSpace(req.NotificationMode))
+		if notificationMode != "email" && notificationMode != "sms_whatsapp" {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"notification_mode": "Select a valid notification mode.",
+			}))
+			return
+		}
+
+		note := strings.TrimSpace(req.Note)
+		if note == "" {
+			note = fmt.Sprintf("Purchase order notification for %s", order.ReferenceNumber)
+		}
+
+		var (
+			channels  []string
+			receivers []string
+			message   string
+		)
+
+		switch notificationMode {
+		case "email":
+			receivers = normalizeNotificationEmails(req.EmailTo)
+			if len(receivers) == 0 {
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"email_to": "Enter at least one valid email address.",
+				}))
+				return
+			}
+			channels = []string{"email"}
+			message = strings.TrimSpace(req.EmailMessage)
+		case "sms_whatsapp":
+			receivers = normalizeNotificationPhoneNumbers(req.SmsWhatsappReceivers)
+			if len(receivers) == 0 {
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"sms_whatsapp_receivers": "Enter at least one valid phone number.",
+				}))
+				return
+			}
+			channels = []string{"sms", "whatsapp"}
+			message = strings.TrimSpace(req.SmsWhatsappMessage)
+		}
+
+		tx, err := pool.Begin(c.Request.Context())
+		if err != nil {
+			log.Printf("send purchase order notification handler: begin tx failed err=%v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to send notification"})
+			return
+		}
+		defer func() {
+			_ = tx.Rollback(c.Request.Context())
+		}()
+
+		if err := repopurchaseorder.CreatePurchaseOrderNotificationTx(c.Request.Context(), tx, repopurchaseorder.CreatePurchaseOrderNotificationInput{
+			BusinessID:              businessID,
+			PurchaseOrderID:         order.ID,
+			PurchaseOrderStatusCode: order.Status,
+			Channels:                channels,
+			Receivers:               receivers,
+			EmailSubject:            req.EmailSubject,
+			EmailCc:                 req.EmailCc,
+			EmailBcc:                req.EmailBcc,
+			Message:                 message,
+			Note:                    note,
+			CreatedBy:               user.ID,
+		}); err != nil {
+			log.Printf("send purchase order notification handler: insert notification failed business_id=%s order_id=%s err=%v", businessID, orderID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to send notification"})
+			return
+		}
+
+		if err := repopurchaseorder.CreatePurchaseOrderLogTx(c.Request.Context(), tx, repopurchaseorder.CreatePurchaseOrderLogInput{
+			BusinessID:      businessID,
+			PurchaseOrderID: order.ID,
+			Action:          "notification_sent",
+			ActionedBy:      user.ID,
+			Note:            note,
+		}); err != nil {
+			log.Printf("send purchase order notification handler: insert log failed business_id=%s order_id=%s err=%v", businessID, orderID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to send notification"})
+			return
+		}
+
+		if err := tx.Commit(c.Request.Context()); err != nil {
+			log.Printf("send purchase order notification handler: commit failed business_id=%s order_id=%s err=%v", businessID, orderID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to send notification"})
+			return
+		}
+
+		log.Printf("purchase order notification queued business_id=%s order_id=%s reference=%s mode=%s", businessID, order.ID, order.ReferenceNumber, notificationMode)
 		c.JSON(http.StatusOK, gin.H{
-			"message": fmt.Sprintf("Notification queued for %s", order.ReferenceNumber),
+			"message":   fmt.Sprintf("Notification queued for %s", order.ReferenceNumber),
+			"channels":  channels,
+			"receivers": receivers,
 		})
 	}
 }
@@ -360,6 +470,61 @@ func handlePurchaseOrderExportError(c *gin.Context, err error, message string) {
 		log.Printf("purchase order export handler failed err=%v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": message})
 	}
+}
+
+func normalizeNotificationPhoneNumbers(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	normalized := make([]string, 0, len(values))
+
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if !strings.HasPrefix(value, "0") || len(value) != 10 {
+			continue
+		}
+		valid := true
+		for _, ch := range value {
+			if ch < '0' || ch > '9' {
+				valid = false
+				break
+			}
+		}
+		if !valid {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+
+	return normalized
+}
+
+func normalizeNotificationEmails(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	normalized := make([]string, 0, len(values))
+
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if !strings.Contains(value, "@") || !strings.Contains(value, ".") {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, value)
+	}
+
+	return normalized
 }
 
 func resolvePurchaseOrderExportColumns(raw string) []purchaseOrderExportColumn {

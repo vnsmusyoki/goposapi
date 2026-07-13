@@ -36,6 +36,7 @@ type createPurchaseOrderPayload struct {
 	ApprovalReminderChannels  []string                                      `json:"approval_reminder_channels"`
 	ApprovalReminderMessage   *string                                       `json:"approval_reminder_message"`
 	ApprovalReminderReceivers []string                                      `json:"approval_reminder_receivers"`
+	StatusChangeReason        *string                                       `json:"status_change_reason"`
 	Subtotal                  *float64                                      `json:"subtotal"`
 	TotalDiscount             *float64                                      `json:"total_discount"`
 	TotalTax                  *float64                                      `json:"total_tax"`
@@ -346,41 +347,69 @@ func UpdatePurchaseOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Ser
 		}
 
 		purchaseOrderID = strings.TrimSpace(purchaseOrderID)
+		nextStatus := strings.ToLower(strings.TrimSpace(derefString(payload.Status)))
+		if err := validatePurchaseOrderStatusTransition(existing.Status, nextStatus); err != nil {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"status": err.Error(),
+			}))
+			return
+		}
+		statusChanged := !strings.EqualFold(existing.Status, nextStatus)
+		statusChangeReason := strings.TrimSpace(derefString(payload.StatusChangeReason))
+		nextDeliveryStatus := strings.ToLower(strings.TrimSpace(derefString(payload.DeliveryStatus)))
+		if statusChanged {
+			nextDeliveryStatus = derivePurchaseOrderDeliveryStatus(nextStatus)
+		}
+		if statusChanged && statusChangeReason == "" {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"status_change_reason": "Please provide a reason for the status change.",
+			}))
+			return
+		}
+
 		note := buildPurchaseOrderUpdateNote(existing.ReferenceNumber, user.FullName, *existing, repopurchaseorder.PurchaseOrder{
-			Status:         strings.ToLower(strings.TrimSpace(derefString(payload.Status))),
-			DeliveryStatus: strings.ToLower(strings.TrimSpace(derefString(payload.DeliveryStatus))),
+			Status:         nextStatus,
+			DeliveryStatus: nextDeliveryStatus,
 			PaymentStatus:  strings.ToLower(strings.TrimSpace(derefString(payload.PaymentStatus))),
 		}, len(items), derefFloat64(payload.GrandTotal))
+		if statusChanged {
+			note = buildPurchaseOrderStatusChangeNote(existing.ReferenceNumber, user.FullName, existing.Status, nextStatus, statusChangeReason)
+		}
 
 		updatedOrder, err := repopurchaseorder.UpdatePurchaseOrderRepository(pool, repopurchaseorder.UpdatePurchaseOrderInput{
-			BusinessID:                businessID,
-			PurchaseOrderID:           purchaseOrderID,
-			SupplierID:                derefString(payload.SupplierID),
-			LocationID:                derefString(payload.LocationID),
-			ReferenceNumber:           derefString(payload.ReferenceNumber),
-			OrderDate:                 derefString(payload.OrderDate),
-			DeliveryDate:              derefString(payload.DeliveryDate),
-			DeliveryAddress:           derefString(payload.DeliveryAddress),
-			DeliveryCharges:           derefFloat64(payload.DeliveryCharges),
-			DeliveryDocument:          derefString(payload.DeliveryDocument),
-			OrderDiscountAmount:       derefFloat64(payload.OrderDiscountAmount),
-			PaymentTermValue:          derefInt(payload.PaymentTermValue),
-			PaymentTermUnit:           derefString(payload.PaymentTermUnit),
-			AttachmentName:            derefString(payload.Attachment),
-			Notes:                     derefString(payload.Notes),
-			Status:                    derefString(payload.Status),
-			DeliveryStatus:            derefString(payload.DeliveryStatus),
-			PaymentStatus:             derefString(payload.PaymentStatus),
-			Subtotal:                  derefFloat64(payload.Subtotal),
-			TotalDiscount:             derefFloat64(payload.TotalDiscount),
-			TotalTax:                  derefFloat64(payload.TotalTax),
-			GrandTotal:                derefFloat64(payload.GrandTotal),
-			ItemsCount:                derefInt(payload.ItemsCount),
-			TotalQuantity:             derefFloat64(payload.TotalQuantity),
-			UpdatedBy:                 user.ID,
-			Items:                     items,
-			AdditionalExpenses:        additionalExpenses,
-			ActivityAction:            "updated",
+			BusinessID:          businessID,
+			PurchaseOrderID:     purchaseOrderID,
+			SupplierID:          derefString(payload.SupplierID),
+			LocationID:          derefString(payload.LocationID),
+			ReferenceNumber:     derefString(payload.ReferenceNumber),
+			OrderDate:           derefString(payload.OrderDate),
+			DeliveryDate:        derefString(payload.DeliveryDate),
+			DeliveryAddress:     derefString(payload.DeliveryAddress),
+			DeliveryCharges:     derefFloat64(payload.DeliveryCharges),
+			DeliveryDocument:    derefString(payload.DeliveryDocument),
+			OrderDiscountAmount: derefFloat64(payload.OrderDiscountAmount),
+			PaymentTermValue:    derefInt(payload.PaymentTermValue),
+			PaymentTermUnit:     derefString(payload.PaymentTermUnit),
+			AttachmentName:      derefString(payload.Attachment),
+			Notes:               derefString(payload.Notes),
+			Status:              derefString(payload.Status),
+			DeliveryStatus:      nextDeliveryStatus,
+			PaymentStatus:       derefString(payload.PaymentStatus),
+			Subtotal:            derefFloat64(payload.Subtotal),
+			TotalDiscount:       derefFloat64(payload.TotalDiscount),
+			TotalTax:            derefFloat64(payload.TotalTax),
+			GrandTotal:          derefFloat64(payload.GrandTotal),
+			ItemsCount:          derefInt(payload.ItemsCount),
+			TotalQuantity:       derefFloat64(payload.TotalQuantity),
+			UpdatedBy:           user.ID,
+			Items:               items,
+			AdditionalExpenses:  additionalExpenses,
+			ActivityAction: func() string {
+				if statusChanged {
+					return "status_changed"
+				}
+				return "updated"
+			}(),
 			ActivityActionedBy:        user.ID,
 			ActivityNote:              note,
 			PreviousStatus:            existing.Status,
@@ -389,6 +418,7 @@ func UpdatePurchaseOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Ser
 			ApprovalReminderChannels:  normalizeApprovalReminderChannels(payload.ApprovalReminderChannels),
 			ApprovalReminderMessage:   derefString(payload.ApprovalReminderMessage),
 			ApprovalReminderReceivers: approvalReminderReceivers,
+			StatusChangeReason:        statusChangeReason,
 		})
 		if err != nil {
 			switch err {
@@ -581,6 +611,8 @@ func DeletePurchaseOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Ser
 				}))
 			case repopurchaseorder.ErrPurchaseOrderNotFound:
 				c.JSON(http.StatusNotFound, gin.H{"message": "Purchase order not found"})
+			case repopurchaseorder.ErrPurchaseOrderCannotDelete:
+				c.JSON(http.StatusConflict, gin.H{"message": "This purchase order cannot be deleted in its current status"})
 			default:
 				log.Printf("delete purchase order handler: repository failed business_id=%s order_id=%s err=%v", businessID, purchaseOrderID, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to delete purchase order"})
@@ -735,6 +767,71 @@ func buildPurchaseOrderUpdateNote(referenceNumber, actorName string, previousOrd
 	}
 
 	return summary + " Changes: " + strings.Join(changes, "; ") + "."
+}
+
+func buildPurchaseOrderStatusChangeNote(referenceNumber, actorName, previousStatus, nextStatus, reason string) string {
+	ref := strings.TrimSpace(referenceNumber)
+	if ref == "" {
+		ref = "purchase order"
+	}
+
+	actor := strings.TrimSpace(actorName)
+	if actor == "" {
+		actor = "System"
+	}
+
+	prev := humanizePurchaseOrderState(previousStatus)
+	next := humanizePurchaseOrderState(nextStatus)
+	trimmedReason := strings.TrimSpace(reason)
+	if trimmedReason == "" {
+		trimmedReason = "No reason provided."
+	}
+
+	return fmt.Sprintf("%s status changed from %s to %s by %s. Reason: %s", titleCase(ref), prev, next, actor, trimmedReason)
+}
+
+func derivePurchaseOrderDeliveryStatus(orderStatus string) string {
+	switch strings.ToLower(strings.TrimSpace(orderStatus)) {
+	case "ordered":
+		return "in_transit"
+	case "partially_received":
+		return "in_transit"
+	case "received", "completed", "closed":
+		return "delivered"
+	case "cancelled":
+		return "pending_delivery"
+	default:
+		return "pending_delivery"
+	}
+}
+
+func validatePurchaseOrderStatusTransition(previousStatus, nextStatus string) error {
+	prev := strings.ToLower(strings.TrimSpace(previousStatus))
+	next := strings.ToLower(strings.TrimSpace(nextStatus))
+
+	if prev == "" || next == "" || prev == next {
+		return nil
+	}
+
+	allowed := map[string][]string{
+		"draft":              {"pending_approval", "approved", "cancelled"},
+		"pending_approval":   {"approved", "cancelled"},
+		"approved":           {"ordered", "cancelled"},
+		"ordered":            {"partially_received", "received", "cancelled"},
+		"partially_received": {"received", "cancelled"},
+		"received":           {"completed", "closed", "cancelled"},
+		"completed":          {"closed"},
+		"cancelled":          {},
+		"closed":             {},
+	}
+
+	for _, candidate := range allowed[prev] {
+		if candidate == next {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("cannot change purchase order status from %s to %s", humanizePurchaseOrderState(prev), humanizePurchaseOrderState(next))
 }
 
 func buildPurchaseOrderResponseMessage(status string, reminderChannels []string) string {

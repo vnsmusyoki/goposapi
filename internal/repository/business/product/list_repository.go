@@ -104,8 +104,8 @@ func ListProductsRepository(pool *pgxpool.Pool, businessID string, filters ListP
 			COALESCE(p.default_purchase_price, 0),
 			COALESCE(p.default_selling_price, 0),
 			COALESCE(p.profit_margin, 0),
-			0::int AS current_stock,
-			0::numeric AS current_stock_value,
+			COALESCE(stock.current_stock, 0) AS current_stock,
+			COALESCE(stock.current_stock_value, 0)::numeric AS current_stock_value,
 			0::int AS total_units_sold,
 			0::int AS total_units_transferred,
 			0::int AS total_units_adjusted,
@@ -120,6 +120,15 @@ func ListProductsRepository(pool *pgxpool.Pool, businessID string, filters ListP
 		LEFT JOIN product_locations pl ON pl.product_id = p.id AND pl.deleted_at IS NULL
 		LEFT JOIN business_locations bl ON bl.id = pl.location_id
 		LEFT JOIN LATERAL (
+			SELECT
+				COALESCE(ROUND(SUM(ib.quantity_available)), 0)::int AS current_stock,
+				COALESCE(SUM(ib.quantity_available * COALESCE(p.default_purchase_price, 0)), 0)::numeric AS current_stock_value
+			FROM inventory_balances ib
+			WHERE ib.business_id = p.business_id
+			  AND ib.product_id = p.id
+			  %s
+		) stock ON TRUE
+		LEFT JOIN LATERAL (
 			SELECT image_url
 			FROM product_images
 			WHERE product_id = p.id
@@ -129,9 +138,14 @@ func ListProductsRepository(pool *pgxpool.Pool, businessID string, filters ListP
 		) pi ON TRUE
 		%s
 		GROUP BY
-			p.id, u.name, b.name, c.name, sc.name, pi.image_url
+			p.id, u.name, b.name, c.name, sc.name, pi.image_url, stock.current_stock, stock.current_stock_value
 		ORDER BY p.created_at DESC, p.name ASC
-	`, where), args...)
+	`, func() string {
+		if filters.LocationID != "" && filters.LocationID != "all" {
+			return fmt.Sprintf("AND ib.location_id = $%d::uuid", len(args))
+		}
+		return ""
+	}(), where), args...)
 	if err != nil {
 		return nil, fmt.Errorf("list products: %w", err)
 	}

@@ -58,13 +58,15 @@ type PurchaseOrderExtraCost struct {
 }
 
 type PurchaseOrderStatusDefinition struct {
-	Code              string `json:"code"`
-	Name              string `json:"name"`
-	WhatHappens       string `json:"whatHappens"`
-	EditableNote      string `json:"editableNote"`
-	StockAffectedNote string `json:"stockAffectedNote"`
-	PrepareInvoice    bool   `json:"prepareInvoice"`
-	SortOrder         int    `json:"sortOrder"`
+	Code                   string `json:"code"`
+	Name                   string `json:"name"`
+	WhatHappens            string `json:"whatHappens"`
+	EditableNote           string `json:"editableNote"`
+	StockAffectedNote      string `json:"stockAffectedNote"`
+	RequiresReceivingItems bool   `json:"requiresReceivingItems"`
+	CanBeDeleted           bool   `json:"canBeDeleted"`
+	PrepareInvoice         bool   `json:"prepareInvoice"`
+	SortOrder              int    `json:"sortOrder"`
 }
 
 type PurchaseOrderLog struct {
@@ -140,6 +142,9 @@ type PurchaseOrderNotification struct {
 	PurchaseOrderStatusCode string   `json:"purchaseOrderStatusCode"`
 	Channels                []string `json:"channels"`
 	Receivers               []string `json:"receivers"`
+	EmailSubject            string   `json:"emailSubject"`
+	EmailCc                 []string `json:"emailCc"`
+	EmailBcc                []string `json:"emailBcc"`
 	Message                 string   `json:"message"`
 	Note                    string   `json:"note"`
 	CreatedBy               string   `json:"createdBy"`
@@ -274,4 +279,5 @@ type UpdatePurchaseOrderInput struct {
 	ApprovalReminderChannels  []string
 	ApprovalReminderMessage   string
 	ApprovalReminderReceivers []string
+	StatusChangeReason        string
 }

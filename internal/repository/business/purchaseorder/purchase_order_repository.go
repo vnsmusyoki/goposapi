@@ -368,6 +368,11 @@ func UpdatePurchaseOrderRepository(pool *pgxpool.Pool, req UpdatePurchaseOrderIn
 		_ = tx.Rollback(ctx)
 	}()
 
+	existing, err := getPurchaseOrderByID(ctx, tx, req.BusinessID, req.PurchaseOrderID)
+	if err != nil {
+		return nil, err
+	}
+
 	commandTag, err := tx.Exec(ctx, `
 		UPDATE purchase_orders
 		SET supplier_id = $3::uuid,
@@ -592,6 +597,10 @@ func UpdatePurchaseOrderRepository(pool *pgxpool.Pool, req UpdatePurchaseOrderIn
 		return nil, err
 	}
 
+	if err := syncPurchaseOrderInventoryTx(ctx, tx, req, existing, existingItemReceipts, req.Items); err != nil {
+		return nil, err
+	}
+
 	if strings.TrimSpace(req.ActivityAction) != "" && strings.TrimSpace(req.ActivityNote) != "" {
 		if err := insertPurchaseOrderLog(ctx, tx, CreatePurchaseOrderLogInput{
 			BusinessID:      req.BusinessID,
@@ -655,6 +664,32 @@ func DeletePurchaseOrderRepository(pool *pgxpool.Pool, businessID, purchaseOrder
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
+
+	var currentStatus string
+	if err := tx.QueryRow(ctx, `
+		SELECT status
+		FROM purchase_orders
+		WHERE business_id = $1
+		  AND id = $2::uuid
+		  AND deleted_at IS NULL
+		LIMIT 1
+	`, businessID, purchaseOrderID).Scan(&currentStatus); err != nil {
+		if err == pgx.ErrNoRows {
+			return ErrPurchaseOrderNotFound
+		}
+		return fmt.Errorf("load purchase order for delete: %w", err)
+	}
+
+	statusDefinition, err := getPurchaseOrderStatusByCode(ctx, tx, currentStatus)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return fmt.Errorf("purchase order status definition not found")
+		}
+		return fmt.Errorf("load purchase order status definition: %w", err)
+	}
+	if statusDefinition != nil && !statusDefinition.CanBeDeleted {
+		return ErrPurchaseOrderCannotDelete
+	}
 
 	commandTag, err := tx.Exec(ctx, `
 		UPDATE purchase_orders

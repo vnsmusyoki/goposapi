@@ -26,6 +26,8 @@ func ListPurchaseOrderStatusesRepository(pool *pgxpool.Pool, businessID string) 
 			what_happens,
 			editable_note,
 			stock_affected_note,
+			requires_receiving_items,
+			can_be_deleted,
 			prepare_invoice,
 			sort_order
 		FROM purchase_order_statuses
@@ -45,6 +47,8 @@ func ListPurchaseOrderStatusesRepository(pool *pgxpool.Pool, businessID string) 
 			&status.WhatHappens,
 			&status.EditableNote,
 			&status.StockAffectedNote,
+			&status.RequiresReceivingItems,
+			&status.CanBeDeleted,
 			&status.PrepareInvoice,
 			&status.SortOrder,
 		); err != nil {
@@ -76,6 +80,8 @@ func getPurchaseOrderStatusByCode(ctx context.Context, querier interface {
 			what_happens,
 			editable_note,
 			stock_affected_note,
+			requires_receiving_items,
+			can_be_deleted,
 			prepare_invoice,
 			sort_order
 		FROM purchase_order_statuses
@@ -87,6 +93,8 @@ func getPurchaseOrderStatusByCode(ctx context.Context, querier interface {
 		&status.WhatHappens,
 		&status.EditableNote,
 		&status.StockAffectedNote,
+		&status.RequiresReceivingItems,
+		&status.CanBeDeleted,
 		&status.PrepareInvoice,
 		&status.SortOrder,
 	); err != nil {

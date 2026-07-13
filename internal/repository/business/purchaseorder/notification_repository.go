@@ -3,6 +3,7 @@ package purchaseorder
 import (
 	"context"
 	"fmt"
+	"net/mail"
 	"strings"
 
 	"github.com/jackc/pgconn"
@@ -14,6 +15,9 @@ type CreatePurchaseOrderNotificationInput struct {
 	PurchaseOrderStatusCode string
 	Channels                []string
 	Receivers               []string
+	EmailSubject            string
+	EmailCc                 []string
+	EmailBcc                []string
 	Message                 string
 	Note                    string
 	CreatedBy               string
@@ -31,11 +35,14 @@ func insertPurchaseOrderNotification(ctx context.Context, querier interface {
 	req.BusinessID = strings.TrimSpace(req.BusinessID)
 	req.PurchaseOrderID = strings.TrimSpace(req.PurchaseOrderID)
 	req.PurchaseOrderStatusCode = strings.TrimSpace(req.PurchaseOrderStatusCode)
+	req.EmailSubject = strings.TrimSpace(req.EmailSubject)
 	req.Message = strings.TrimSpace(req.Message)
 	req.Note = strings.TrimSpace(req.Note)
 	req.CreatedBy = strings.TrimSpace(req.CreatedBy)
 	req.Channels = normalizeApprovalReminderChannels(req.Channels)
-	req.Receivers = normalizePhoneNumbers(req.Receivers)
+	req.Receivers = normalizeNotificationReceivers(req.Channels, req.Receivers)
+	req.EmailCc = normalizeEmailAddresses(req.EmailCc)
+	req.EmailBcc = normalizeEmailAddresses(req.EmailBcc)
 
 	if req.BusinessID == "" || req.PurchaseOrderID == "" || req.PurchaseOrderStatusCode == "" {
 		return ErrBusinessNotResolved
@@ -48,6 +55,9 @@ func insertPurchaseOrderNotification(ctx context.Context, querier interface {
 			purchase_order_status_code,
 			channels,
 			receivers,
+			email_subject,
+			email_cc,
+			email_bcc,
 			message,
 			note,
 			created_by,
@@ -62,11 +72,14 @@ func insertPurchaseOrderNotification(ctx context.Context, querier interface {
 			$5,
 			$6,
 			$7,
-			NULLIF($8, '')::uuid,
+			$8,
+			$9,
+			$10,
+			NULLIF($11, '')::uuid,
 			CURRENT_TIMESTAMP,
 			CURRENT_TIMESTAMP
 		)
-	`, req.BusinessID, req.PurchaseOrderID, req.PurchaseOrderStatusCode, req.Channels, req.Receivers, req.Message, req.Note, req.CreatedBy); err != nil {
+	`, req.BusinessID, req.PurchaseOrderID, req.PurchaseOrderStatusCode, req.Channels, req.Receivers, req.EmailSubject, req.EmailCc, req.EmailBcc, req.Message, req.Note, req.CreatedBy); err != nil {
 		return fmt.Errorf("insert purchase order notification: %w", err)
 	}
 
@@ -115,7 +128,7 @@ func normalizeApprovalReminderChannels(channels []string) []string {
 			continue
 		}
 		switch channel {
-		case "notification", "sms", "whatsapp":
+		case "notification", "email", "sms", "whatsapp":
 		default:
 			continue
 		}
@@ -131,4 +144,36 @@ func normalizeApprovalReminderChannels(channels []string) []string {
 	}
 
 	return normalized
+}
+
+func normalizeEmailAddresses(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	normalized := make([]string, 0, len(values))
+
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, err := mail.ParseAddress(value); err != nil {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, value)
+	}
+
+	return normalized
+}
+
+func normalizeNotificationReceivers(channels []string, values []string) []string {
+	for _, channel := range channels {
+		if strings.EqualFold(channel, "email") {
+			return normalizeEmailAddresses(values)
+		}
+	}
+	return normalizePhoneNumbers(values)
 }
