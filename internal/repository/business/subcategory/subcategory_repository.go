@@ -23,7 +23,7 @@ func ListSubCategoriesRepository(pool *pgxpool.Pool, businessID string) ([]model
 
 	rows, err := pool.Query(ctx, `
 		SELECT
-			sc.id::text,
+			sc.uuid_id::text,
 			sc.business_id::text,
 			sc.parent_category_id::text,
 			COALESCE(pc.name, '') AS parent_category_name,
@@ -109,7 +109,7 @@ func CreateSubCategoryRepository(pool *pgxpool.Pool, req CreateSubCategoryInput)
 			SELECT 1
 			FROM product_categories
 			WHERE business_id = $1
-			  AND id::text = $2
+			  AND uuid_id::text = $2
 			  AND deleted_at IS NULL
 		)
 	`, req.BusinessID, req.ParentCategoryID).Scan(&parentExists); err != nil {
@@ -169,7 +169,7 @@ func CreateSubCategoryRepository(pool *pgxpool.Pool, req CreateSubCategoryInput)
 			)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, $10, $11)
 			RETURNING
-				id::text AS id,
+				uuid_id::text AS id,
 				business_id::text AS business_id,
 				parent_category_id::text AS parent_category_id,
 				sub_category_code AS sub_category_code,
@@ -254,7 +254,7 @@ func UpdateSubCategoryRepository(pool *pgxpool.Pool, req UpdateSubCategoryInput)
 			SELECT 1
 			FROM product_categories
 			WHERE business_id = $1
-			  AND id::text = $2
+			  AND uuid_id::text = $2
 			  AND deleted_at IS NULL
 		)
 	`, req.BusinessID, req.ParentCategoryID).Scan(&exists); err != nil {
@@ -269,7 +269,7 @@ func UpdateSubCategoryRepository(pool *pgxpool.Pool, req UpdateSubCategoryInput)
 			SELECT 1
 			FROM product_sub_categories
 			WHERE business_id = $1
-			  AND id::text <> $2
+			  AND uuid_id::text <> $2
 			  AND parent_category_id::text = $3
 			  AND LOWER(name) = LOWER($4)
 			  AND deleted_at IS NULL
@@ -286,7 +286,7 @@ func UpdateSubCategoryRepository(pool *pgxpool.Pool, req UpdateSubCategoryInput)
 			SELECT 1
 			FROM product_sub_categories
 			WHERE business_id = $1
-			  AND id::text <> $2
+			  AND uuid_id::text <> $2
 			  AND sub_category_code = $3
 			  AND deleted_at IS NULL
 		)
@@ -311,10 +311,10 @@ func UpdateSubCategoryRepository(pool *pgxpool.Pool, req UpdateSubCategoryInput)
 			featured = $11,
 			sort_order = $12
 		WHERE business_id = $1
-		  AND id::text = $2
+		  AND uuid_id::text = $2
 		  AND deleted_at IS NULL
 		RETURNING
-			id::text,
+			uuid_id::text,
 			business_id::text,
 			parent_category_id::text,
 			sub_category_code,
@@ -354,7 +354,7 @@ func UpdateSubCategoryRepository(pool *pgxpool.Pool, req UpdateSubCategoryInput)
 	if err := pool.QueryRow(ctx, `
 		SELECT COALESCE(name, '')
 		FROM product_categories
-		WHERE id::text = $1
+		WHERE uuid_id::text = $1
 		  AND deleted_at IS NULL
 	`, item.ParentCategoryID).Scan(&item.ParentCategoryName); err != nil {
 		return nil, fmt.Errorf("load parent category: %w", err)
@@ -380,7 +380,7 @@ func DeleteSubCategoryRepository(pool *pgxpool.Pool, businessID, subCategoryID, 
 			deleted_at = NOW(),
 			deleted_by = NULLIF($3, '')::uuid
 		WHERE business_id = $1
-		  AND id::text = $2
+		  AND uuid_id::text = $2
 		  AND deleted_at IS NULL
 	`, businessID, subCategoryID, deletedBy)
 	if err != nil {

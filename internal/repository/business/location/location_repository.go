@@ -21,6 +21,7 @@ func CreateBusinessLocationRepository(
 
 	req.BusinessID = strings.TrimSpace(req.BusinessID)
 	req.LocationID = strings.TrimSpace(req.LocationID)
+	req.LocationCode = strings.TrimSpace(req.LocationCode)
 	req.LocationName = strings.TrimSpace(req.LocationName)
 	req.Landmark = strings.TrimSpace(req.Landmark)
 	req.ExactAddress = strings.TrimSpace(req.ExactAddress)
@@ -49,6 +50,9 @@ func CreateBusinessLocationRepository(
 
 	if req.BusinessID == "" || req.LocationID == "" || req.LocationName == "" || req.Mobile == "" || req.KraPin == "" {
 		return nil, ErrInvalidBusinessLocationInput
+	}
+	if req.LocationCode == "" {
+		req.LocationCode = req.LocationID
 	}
 
 	if req.Country == "" {
@@ -119,6 +123,7 @@ func CreateBusinessLocationRepository(
 		INSERT INTO business_locations (
 			business_id,
 			location_id,
+			location_code,
 			location_name,
 			landmark,
 			exact_address,
@@ -159,10 +164,10 @@ func CreateBusinessLocationRepository(
 			print_fiscal_details
 		)
 		VALUES (
-			$1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9,
-			$10, $11, $12, NULLIF($13, ''), NULLIF($14, ''), NULLIF($15, ''), $16, $17, $18, $19, $20::jsonb,
-			$21, $22, $23, NULLIF($24, ''), NULLIF($25, ''), $26, $27, NULLIF($28, ''), $29, $30, $31,
-			$32, NULLIF($33, ''), NULLIF($34, ''), NULLIF($35, ''), $36, $37, $38, $39, $40
+			$1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''), $10,
+			$11, $12, $13, NULLIF($14, ''), NULLIF($15, ''), NULLIF($16, ''), $17, $18, $19, $20, $21::jsonb,
+			$22, $23, $24, NULLIF($25, ''), NULLIF($26, ''), $27, $28, NULLIF($29, ''), $30, $31, $32,
+			$33, NULLIF($34, ''), NULLIF($35, ''), NULLIF($36, ''), $37, $38, $39, $40, $41
 		)
 		RETURNING
 			id::text,
@@ -211,6 +216,7 @@ func CreateBusinessLocationRepository(
 	`,
 		req.BusinessID,
 		req.LocationID,
+		req.LocationCode,
 		req.LocationName,
 		nullIfBlank(req.Landmark),
 		nullIfBlank(req.ExactAddress),
@@ -253,6 +259,7 @@ func CreateBusinessLocationRepository(
 		&location.ID,
 		&location.BusinessID,
 		&location.LocationID,
+		&location.LocationCode,
 		&location.LocationName,
 		&location.Landmark,
 		&location.ExactAddress,

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"pos/internal/auth"
 )
 
 func RequestLogger() gin.HandlerFunc {
@@ -14,9 +15,16 @@ func RequestLogger() gin.HandlerFunc {
 		path := c.Request.URL.Path
 		contentType := c.GetHeader("Content-Type")
 		contentLength := c.Request.ContentLength
+		cookieName := auth.SessionCookieName()
+		cookieState := "missing"
+		cookieFingerprint := ""
+		if cookie, err := c.Request.Cookie(cookieName); err == nil && cookie.Value != "" {
+			cookieState = "present"
+			cookieFingerprint = auth.SessionTokenFingerprint(cookie.Value)
+		}
 
-		log.Printf("request start method=%s path=%s remote_ip=%s content_type=%s content_length=%d",
-			method, path, c.ClientIP(), contentType, contentLength)
+		log.Printf("request start method=%s path=%s remote_ip=%s content_type=%s content_length=%d session_cookie_name=%s session_cookie_state=%s session_cookie_fingerprint=%s",
+			method, path, c.ClientIP(), contentType, contentLength, cookieName, cookieState, cookieFingerprint)
 
 		c.Next()
 

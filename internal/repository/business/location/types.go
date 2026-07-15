@@ -3,6 +3,7 @@ package location
 type CreateBusinessLocationInput struct {
 	BusinessID               string
 	LocationID               string
+	LocationCode             string
 	LocationName             string
 	Landmark                 string
 	ExactAddress             string

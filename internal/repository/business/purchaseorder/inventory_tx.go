@@ -126,6 +126,7 @@ func syncPurchaseOrderInventoryTx(
 				UnitCost:        item.UnitCostBeforeTax,
 				LotNumber:       item.LotNumber,
 				ExpiryDate:      item.ExpiryDate,
+				ManufactureDate: item.ManufactureDate,
 				PerformedBy:     req.UpdatedBy,
 				Note:            fmt.Sprintf("Reversed purchase order stock for %s.", item.ProductID),
 			}); err != nil {
@@ -145,6 +146,7 @@ func syncPurchaseOrderInventoryTx(
 				UnitCost:        item.UnitCostBeforeTax,
 				LotNumber:       item.LotNumber,
 				ExpiryDate:      item.ExpiryDate,
+				ManufactureDate: item.ManufactureDate,
 				PerformedBy:     req.UpdatedBy,
 				Note:            fmt.Sprintf("Recorded purchase order receipt for %s.", item.ProductID),
 			}); err != nil {
@@ -167,6 +169,7 @@ type inventoryDeltaInput struct {
 	UnitCost        float64
 	LotNumber       string
 	ExpiryDate      string
+	ManufactureDate string
 	PerformedBy     string
 	Note            string
 }
@@ -319,6 +322,7 @@ func insertInventoryBatchTx(ctx context.Context, tx purchaseOrderInventoryTx, re
 			lot_number,
 			batch_number,
 			expiry_date,
+			manufacture_date,
 			unit_cost,
 			quantity_received,
 			quantity_remaining,
@@ -327,7 +331,7 @@ func insertInventoryBatchTx(ctx context.Context, tx purchaseOrderInventoryTx, re
 			created_at,
 			updated_at
 		)
-		VALUES (
+			VALUES (
 			$1::uuid,
 			$2::uuid,
 			$3::uuid,
@@ -337,16 +341,17 @@ func insertInventoryBatchTx(ctx context.Context, tx purchaseOrderInventoryTx, re
 			$6,
 			$7,
 			$8,
-			$9,
+			NULLIF($9, '')::date,
 			$10,
-			$10,
+			$11,
+			$11,
 			CURRENT_TIMESTAMP,
-			NULLIF($11, '')::uuid,
+			NULLIF($12, '')::uuid,
 			CURRENT_TIMESTAMP,
 			CURRENT_TIMESTAMP
 		)
 		RETURNING id::text
-	`, req.BusinessID, req.ProductID, req.LocationID, req.SupplierID, req.PurchaseOrderID, req.LotNumber, req.ReferenceNumber, expiry, req.UnitCost, req.QuantityDelta, req.PerformedBy).Scan(&batchID); err != nil {
+	`, req.BusinessID, req.ProductID, req.LocationID, req.SupplierID, req.PurchaseOrderID, req.LotNumber, req.ReferenceNumber, expiry, req.UnitCost, req.QuantityDelta, req.ManufactureDate, req.PerformedBy).Scan(&batchID); err != nil {
 		return "", fmt.Errorf("insert inventory batch: %w", err)
 	}
 	_ = inventoryBalanceID

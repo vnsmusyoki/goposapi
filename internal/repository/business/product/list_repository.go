@@ -116,7 +116,7 @@ func ListProductsRepository(pool *pgxpool.Pool, businessID string, filters ListP
 		LEFT JOIN business_units u ON u.id = p.unit_id
 		LEFT JOIN product_brands b ON b.id = p.brand_id
 		LEFT JOIN product_categories c ON c.id = p.category_id
-		LEFT JOIN product_sub_categories sc ON sc.id = p.sub_category_id
+		LEFT JOIN product_sub_categories sc ON sc.uuid_id = p.sub_category_id
 		LEFT JOIN product_locations pl ON pl.product_id = p.id AND pl.deleted_at IS NULL
 		LEFT JOIN business_locations bl ON bl.id = pl.location_id
 		LEFT JOIN LATERAL (

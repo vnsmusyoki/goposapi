@@ -4,6 +4,7 @@ type BusinessLocation struct {
 	ID                       string   `json:"id"`
 	BusinessID               string   `json:"business_id"`
 	LocationID               string   `json:"location_id"`
+	LocationCode             string   `json:"location_code"`
 	LocationName             string   `json:"location_name"`
 	Landmark                 string   `json:"landmark"`
 	ExactAddress             string   `json:"exact_address"`

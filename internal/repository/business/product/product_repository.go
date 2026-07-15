@@ -408,7 +408,7 @@ func GetProductByIDRepository(pool *pgxpool.Pool, businessID, productID string) 
 		LEFT JOIN business_units u ON u.id = p.unit_id
 		LEFT JOIN product_brands b ON b.id = p.brand_id
 		LEFT JOIN product_categories c ON c.id = p.category_id
-		LEFT JOIN product_sub_categories sc ON sc.id = p.sub_category_id
+		LEFT JOIN product_sub_categories sc ON sc.uuid_id = p.sub_category_id
 		LEFT JOIN product_locations pl ON pl.product_id = p.id AND pl.deleted_at IS NULL
 		LEFT JOIN business_locations bl ON bl.id = pl.location_id
 		LEFT JOIN LATERAL (
@@ -781,7 +781,7 @@ func UpdateProductRepository(pool *pgxpool.Pool, productID string, req CreatePro
 			unit_id = NULLIF($7, '')::uuid,
 			brand_id = NULLIF($8, '')::uuid,
 			category_id = NULLIF($9, '')::uuid,
-			sub_category_id = NULLIF($10, '')::integer,
+			sub_category_id = NULLIF($10, '')::uuid,
 			is_for_selling = $11,
 			manage_stock = $12,
 			alert_quantity = $13,

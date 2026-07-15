@@ -88,6 +88,7 @@ func (s *Service) handleLogin(c *gin.Context) {
 	}
 
 	http.SetCookie(c.Writer, buildSessionCookie(result.Token, result.ExpiresAt, s.cookieSecure))
+	log.Printf("auth login session cookie issued name=%s fingerprint=%s expires_at=%s", sessionCookieName, SessionTokenFingerprint(result.Token), result.ExpiresAt.UTC().Format(time.RFC3339))
 	c.JSON(http.StatusOK, gin.H{
 		"message":   "Logged in successfully",
 		"user":      result.User,
@@ -923,6 +924,19 @@ func hashToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func SessionCookieName() string {
+	return sessionCookieName
+}
+
+func SessionTokenFingerprint(token string) string {
+	sum := hashToken(token)
+	if len(sum) <= 12 {
+		return sum
+	}
+
+	return sum[:12]
+}
+
 func buildSessionCookie(token string, expiresAt time.Time, secure bool) *http.Cookie {
 	return &http.Cookie{
 		Name:     sessionCookieName,
@@ -956,9 +970,17 @@ func (s *Service) ClearSessionCookie() *http.Cookie {
 func readSessionCookie(req *http.Request) (string, bool) {
 	cookie, err := req.Cookie(sessionCookieName)
 	if err != nil || cookie.Value == "" {
+		log.Printf("auth session cookie check method=%s path=%s cookie_name=%s cookie_state=missing", req.Method, req.URL.Path, sessionCookieName)
 		return "", false
 	}
 
+	log.Printf(
+		"auth session cookie check method=%s path=%s cookie_name=%s cookie_state=present fingerprint=%s",
+		req.Method,
+		req.URL.Path,
+		sessionCookieName,
+		SessionTokenFingerprint(cookie.Value),
+	)
 	return cookie.Value, true
 }
 

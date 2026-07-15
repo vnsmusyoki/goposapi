@@ -79,11 +79,120 @@ type PurchaseOrderLog struct {
 	ActionDate      string                  `json:"actionDate"`
 }
 
+type PurchaseReturn struct {
+	ID                      string                  `json:"id"`
+	BusinessID              string                  `json:"businessId"`
+	ParentPurchaseID        string                  `json:"parentPurchaseId"`
+	ParentPurchaseReference string                  `json:"parentPurchaseReference"`
+	ReferenceNumber         string                  `json:"referenceNumber"`
+	ReturnDate              string                  `json:"returnDate"`
+	LocationID              string                  `json:"locationId"`
+	LocationName            string                  `json:"locationName"`
+	SupplierID              string                  `json:"supplierId"`
+	SupplierName            string                  `json:"supplierName"`
+	Status                  string                  `json:"status"`
+	PaymentStatus           string                  `json:"paymentStatus"`
+	GrandTotal              float64                 `json:"grandTotal"`
+	PaymentDue              float64                 `json:"paymentDue"`
+	ReturnReason            string                  `json:"returnReason"`
+	Notes                   string                  `json:"notes"`
+	ItemsCount              int                     `json:"itemsCount"`
+	TotalQuantity           float64                 `json:"totalQuantity"`
+	CreatedBy               *PurchaseOrderCreatedBy `json:"createdBy,omitempty"`
+	Items                   []PurchaseReturnItem    `json:"items,omitempty"`
+	Activities              []PurchaseReturnLog     `json:"activities,omitempty"`
+	CreatedAt               string                  `json:"createdAt"`
+	UpdatedAt               string                  `json:"updatedAt"`
+}
+
+type PurchaseReturnItem struct {
+	ID               string  `json:"id"`
+	PurchaseReturnID string  `json:"purchaseReturnId"`
+	BusinessID       string  `json:"businessId"`
+	ProductID        string  `json:"productId"`
+	ProductName      string  `json:"productName"`
+	SKU              string  `json:"sku"`
+	SupplierID       string  `json:"supplierId"`
+	SupplierName     string  `json:"supplierName"`
+	LocationID       string  `json:"locationId"`
+	LocationName     string  `json:"locationName"`
+	PurchaseOrderID  string  `json:"purchaseOrderId"`
+	InventoryBatchID string  `json:"inventoryBatchId"`
+	LotNumber        string  `json:"lotNumber"`
+	BatchNumber      string  `json:"batchNumber"`
+	ExpiryDate       string  `json:"expiryDate"`
+	ManufactureDate  string  `json:"manufactureDate"`
+	Quantity         float64 `json:"quantity"`
+	UnitPrice        float64 `json:"unitPrice"`
+	LineTotal        float64 `json:"lineTotal"`
+	CreatedAt        string  `json:"createdAt"`
+	UpdatedAt        string  `json:"updatedAt"`
+}
+
+type ListPurchaseReturnsFilters struct {
+	LocationID    string
+	SupplierID    string
+	Status        string
+	PaymentStatus string
+	SearchQuery   string
+	DateFrom      string
+	DateTo        string
+}
+
+type CreatePurchaseReturnInput struct {
+	BusinessID              string
+	ParentPurchaseID        string
+	ParentPurchaseReference string
+	ReferenceNumber         string
+	ReturnDate              string
+	LocationID              string
+	SupplierID              string
+	ReturnReason            string
+	Notes                   string
+	Status                  string
+	PaymentStatus           string
+	GrandTotal              float64
+	PaymentDue              float64
+	ItemsCount              int
+	TotalQuantity           float64
+	CreatedBy               string
+	Items                   []CreatePurchaseReturnItemInput
+}
+
+type UpdatePurchaseReturnInput struct {
+	BusinessID       string
+	PurchaseReturnID string
+	LocationID       string
+	SupplierID       string
+	ReturnReason     string
+	Notes            string
+	UpdatedBy        string
+	Items            []CreatePurchaseReturnItemInput
+}
+
+type CreatePurchaseReturnItemInput struct {
+	ProductID        string
+	BatchKey         string
+	Quantity         float64
+	UnitPrice        float64
+	InventoryBatchID string
+}
+
 type PurchaseOrderSupplierDetails struct {
 	Name    string `json:"name"`
 	Email   string `json:"email"`
 	Phone   string `json:"phone"`
 	Address string `json:"address"`
+}
+
+type PurchaseReturnLog struct {
+	ID               string                  `json:"id"`
+	BusinessID       string                  `json:"businessId"`
+	PurchaseReturnID string                  `json:"purchaseReturnId"`
+	Action           string                  `json:"action"`
+	ActionedBy       *PurchaseOrderCreatedBy `json:"actionedBy,omitempty"`
+	Note             string                  `json:"note"`
+	ActionDate       string                  `json:"actionDate"`
 }
 
 type PurchaseOrderBusinessDetails struct {
@@ -153,6 +262,14 @@ type CreatePurchaseOrderLogInput struct {
 	Action          string
 	ActionedBy      string
 	Note            string
+}
+
+type CreatePurchaseReturnLogInput struct {
+	BusinessID       string
+	PurchaseReturnID string
+	Action           string
+	ActionedBy       string
+	Note             string
 }
 
 type PurchaseOrderApproval struct {

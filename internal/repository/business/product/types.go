@@ -193,3 +193,25 @@ type ListProductsFilters struct {
 	TaxType           string
 	ShowNotForSelling bool
 }
+
+type ProductImportBatch struct {
+	ID         string `json:"id"`
+	BusinessID string `json:"businessId"`
+	FileName   string `json:"fileName"`
+	Status     string `json:"status"`
+	CreatedBy  string `json:"createdBy"`
+	CreatedAt  string `json:"createdAt"`
+	UpdatedAt  string `json:"updatedAt"`
+}
+
+type ProductImportBatchRow struct {
+	ID                string            `json:"id"`
+	BatchID           string            `json:"batchId"`
+	RowNumber         int               `json:"rowNumber"`
+	RowData           map[string]string `json:"rowData"`
+	ValidationErrors  []string          `json:"validationErrors"`
+	Status            string            `json:"status"`
+	ImportedProductID string            `json:"importedProductId"`
+	CreatedAt         string            `json:"createdAt"`
+	UpdatedAt         string            `json:"updatedAt"`
+}
