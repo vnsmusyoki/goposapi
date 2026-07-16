@@ -242,6 +242,21 @@ func UpdateOpeningStockImportRowRequestHandler(pool *pgxpool.Pool, authService *
 			return
 		}
 
+		row, err := repoopeningstock.GetOpeningStockImportBatchRowRepository(pool, businessID, batchID, rowID)
+		if err != nil {
+			if errors.Is(err, repoopeningstock.ErrOpeningStockImportNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"message": "Opening stock import row not found."})
+				return
+			}
+			log.Printf("update opening stock import row: load failed business_id=%s batch_id=%s row_id=%s err=%v", businessID, batchID, rowID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load opening stock import row"})
+			return
+		}
+		if row.Status == "processed" || row.Status == "imported" {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{"form": "This opening stock row has already been processed and cannot be edited."}))
+			return
+		}
+
 		var payload updateOpeningStockImportRowPayload
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{"form": "Request body must be valid JSON."}))
@@ -309,8 +324,8 @@ func ImportOpeningStockImportRowRequestHandler(pool *pgxpool.Pool, authService *
 			return
 		}
 
-		if row.Status == "imported" {
-			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{"form": "This opening stock row has already been imported."}))
+		if row.Status == "processed" || row.Status == "imported" {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{"form": "This opening stock row has already been processed."}))
 			return
 		}
 
@@ -339,9 +354,9 @@ func ImportOpeningStockImportRowRequestHandler(pool *pgxpool.Pool, authService *
 			return
 		}
 
-		_ = repoopeningstock.UpdateOpeningStockImportBatchRowStatusRepository(pool, businessID, batchID, rowID, "imported", inventoryBatchID, nil)
+		_ = repoopeningstock.UpdateOpeningStockImportBatchRowStatusRepository(pool, businessID, batchID, rowID, "processed", inventoryBatchID, nil)
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Opening stock imported successfully",
+			"message": "Opening stock processed successfully",
 		})
 	}
 }

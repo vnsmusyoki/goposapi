@@ -11,6 +11,7 @@ import (
 	categoryhandler "pos/internal/handlers/business/category"
 	locationhandler "pos/internal/handlers/business/location"
 	openingstockhandler "pos/internal/handlers/business/openingstock"
+	customerhandler "pos/internal/handlers/business/customer"
 	producthandler "pos/internal/handlers/business/product"
 	purchaseorderhandler "pos/internal/handlers/business/purchaseorder"
 	settingshandler "pos/internal/handlers/business/settings"
@@ -101,6 +102,10 @@ func main() {
 	api.GET("/business/locations", locationhandler.GetBusinessLocationsRequestHandler(pool, authService))
 	api.POST("/business/locations", locationhandler.CreateBusinessLocationRequestHandler(pool, authService))
 	api.DELETE("/business/locations/:id", locationhandler.DeleteBusinessLocationRequestHandler(pool, authService))
+	api.GET("/business/customers", customerhandler.ListBusinessCustomersRequestHandler(pool, authService))
+	api.POST("/business/customers", customerhandler.CreateBusinessCustomerRequestHandler(pool, authService))
+	api.PUT("/business/customers/:id", customerhandler.UpdateBusinessCustomerRequestHandler(pool, authService))
+	api.DELETE("/business/customers/:id", customerhandler.DeleteBusinessCustomerRequestHandler(pool, authService))
 	api.GET("/business/units", unithandler.GetBusinessUnitsRequestHandler(pool, authService))
 	api.POST("/business/units", unithandler.CreateBusinessUnitRequestHandler(pool, authService))
 	api.PUT("/business/units/:id", unithandler.UpdateBusinessUnitRequestHandler(pool, authService))

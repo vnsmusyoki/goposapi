@@ -1,0 +1,17 @@
+ALTER TABLE customers
+    DROP COLUMN IF EXISTS total_sell_return_due,
+    DROP COLUMN IF EXISTS total_sale_due,
+    DROP COLUMN IF EXISTS advance_balance,
+    DROP COLUMN IF EXISTS customer_group,
+    DROP COLUMN IF EXISTS contact_id,
+    DROP COLUMN IF EXISTS custom_field_5,
+    DROP COLUMN IF EXISTS custom_field_4,
+    DROP COLUMN IF EXISTS custom_field_3,
+    DROP COLUMN IF EXISTS custom_field_2,
+    DROP COLUMN IF EXISTS custom_field_1,
+    DROP COLUMN IF EXISTS shipping_address,
+    DROP COLUMN IF EXISTS credit_limit,
+    DROP COLUMN IF EXISTS pay_terms_value,
+    DROP COLUMN IF EXISTS pay_terms_type,
+    DROP COLUMN IF EXISTS opening_balance,
+    DROP COLUMN IF EXISTS tax_number;
