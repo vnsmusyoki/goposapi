@@ -281,7 +281,7 @@ func GetLatestProductImportBatchRepository(pool *pgxpool.Pool, businessID string
 
 	var batchID string
 	if err := pool.QueryRow(ctx, `
-		SELECT uuid_id::text
+		SELECT id::text
 		FROM product_import_batches
 		WHERE business_id = $1::uuid
 		ORDER BY created_at DESC, id DESC
@@ -417,6 +417,8 @@ func UpdateProductImportBatchRowDataRepository(pool *pgxpool.Pool, businessID, b
 	status := "valid"
 	if len(validationErrors) > 0 {
 		status = "invalid"
+	} else {
+		status = "approved"
 	}
 
 	rowDataJSON, err := json.Marshal(mergedData)
@@ -591,6 +593,26 @@ func buildProductImportProductInputTx(ctx context.Context, tx interface {
 		errs = append(errs, "Location code is required.")
 	}
 
+	if name != "" {
+		exists, err := productNameExistsTx(ctx, tx, businessID, name)
+		if err != nil {
+			return CreateProductInput{}, errs, err
+		}
+		if exists {
+			errs = append(errs, "Product name already exists.")
+		}
+	}
+
+	if sku := normalize("sku"); sku != "" {
+		exists, err := productSKUExistsTx(ctx, tx, businessID, sku)
+		if err != nil {
+			return CreateProductInput{}, errs, err
+		}
+		if exists {
+			errs = append(errs, "Product SKU already exists.")
+		}
+	}
+
 	unitID, err := lookupBusinessUnitIDByNameOrShortNameTx(ctx, tx, businessID, unitValue)
 	if err != nil {
 		return CreateProductInput{}, errs, err
@@ -719,6 +741,42 @@ func lookupBusinessUnitIDByNameOrShortNameTx(ctx context.Context, tx interface {
 		return "", fmt.Errorf("lookup business unit: %w", err)
 	}
 	return id, nil
+}
+
+func productNameExistsTx(ctx context.Context, tx interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, businessID, name string) (bool, error) {
+	var exists bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM products
+			WHERE business_id = $1::uuid
+			  AND LOWER(name) = LOWER($2)
+			  AND deleted_at IS NULL
+		)
+	`, businessID, name).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check product name duplicate: %w", err)
+	}
+	return exists, nil
+}
+
+func productSKUExistsTx(ctx context.Context, tx interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, businessID, sku string) (bool, error) {
+	var exists bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM products
+			WHERE business_id = $1::uuid
+			  AND LOWER(COALESCE(sku, '')) = LOWER($2)
+			  AND deleted_at IS NULL
+		)
+	`, businessID, sku).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check product sku duplicate: %w", err)
+	}
+	return exists, nil
 }
 
 func lookupCategoryIDByCodeTx(ctx context.Context, tx interface {

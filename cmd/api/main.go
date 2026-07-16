@@ -10,6 +10,7 @@ import (
 	brandhandler "pos/internal/handlers/business/brand"
 	categoryhandler "pos/internal/handlers/business/category"
 	locationhandler "pos/internal/handlers/business/location"
+	openingstockhandler "pos/internal/handlers/business/openingstock"
 	producthandler "pos/internal/handlers/business/product"
 	purchaseorderhandler "pos/internal/handlers/business/purchaseorder"
 	settingshandler "pos/internal/handlers/business/settings"
@@ -74,6 +75,12 @@ func main() {
 	api.GET("/products/import/batches/:batchId", producthandler.ListProductImportBatchRequestHandler(pool, authService))
 	api.PUT("/products/import/batches/:batchId/rows/:rowId", producthandler.UpdateProductImportRowRequestHandler(pool, authService))
 	api.POST("/products/import/batches/:batchId/rows/:rowId/import", producthandler.ImportProductImportRowRequestHandler(pool, authService))
+	api.GET("/products/opening-stock/import/template.csv", openingstockhandler.DownloadOpeningStockImportTemplateRequestHandler(authService))
+	api.POST("/products/opening-stock/import/preview", openingstockhandler.PreviewOpeningStockImportRequestHandler(pool, authService))
+	api.GET("/products/opening-stock/import/batches/latest", openingstockhandler.LatestOpeningStockImportBatchRequestHandler(pool, authService))
+	api.GET("/products/opening-stock/import/batches/:batchId", openingstockhandler.ListOpeningStockImportBatchRequestHandler(pool, authService))
+	api.PUT("/products/opening-stock/import/batches/:batchId/rows/:rowId", openingstockhandler.UpdateOpeningStockImportRowRequestHandler(pool, authService))
+	api.POST("/products/opening-stock/import/batches/:batchId/rows/:rowId/import", openingstockhandler.ImportOpeningStockImportRowRequestHandler(pool, authService))
 	api.GET("/products", producthandler.ListProductsRequestHandler(pool, authService))
 	api.GET("/products/search", producthandler.SearchProductsRequestHandler(pool, authService))
 	api.GET("/products/:id", producthandler.GetProductRequestHandler(pool, authService))

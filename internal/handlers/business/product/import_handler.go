@@ -51,11 +51,11 @@ func DownloadProductImportTemplateRequestHandler(authService *auth.Service) gin.
 
 		headers := []string{
 			"Product Name",
-			"SKU",
+			"SKU Code",
 			"Barcode",
 			"Product Type",
-			"Unit",
-			"Brand",
+			"Unit Code",
+			"Brand Name",
 			"Category Code",
 			"Sub Category Code",
 			"Location Code",
@@ -73,7 +73,7 @@ func DownloadProductImportTemplateRequestHandler(authService *auth.Service) gin.
 			"SAMPLE-001",
 			"",
 			"single",
-			"Piece",
+			"PCS",
 			"Sample Brand",
 			"CAT-001",
 			"SUB-001",
@@ -297,23 +297,40 @@ func ImportProductImportRowRequestHandler(pool *pgxpool.Pool, authService *auth.
 }
 
 type updateProductImportRowPayload struct {
-	ProductName          *string `json:"productName"`
-	SKU                  *string `json:"sku"`
-	Barcode              *string `json:"barcode"`
-	ProductType          *string `json:"productType"`
-	Unit                 *string `json:"unit"`
-	Brand                *string `json:"brand"`
-	CategoryCode         *string `json:"categoryCode"`
-	SubCategoryCode      *string `json:"subCategoryCode"`
-	LocationCode         *string `json:"locationCode"`
-	ManageStock          *bool   `json:"manageStock"`
-	AlertQuantity        *string `json:"alertQuantity"`
-	IsForSelling         *bool   `json:"isForSelling"`
-	TaxType              *string `json:"taxType"`
-	TaxRate              *string `json:"taxRate"`
-	DefaultPurchasePrice *string `json:"defaultPurchasePrice"`
-	DefaultSellingPrice  *string `json:"defaultSellingPrice"`
-	Description          *string `json:"description"`
+	ProductName            *string `json:"productName"`
+	SKU                    *string `json:"sku"`
+	Barcode                *string `json:"barcode"`
+	UnitID                 *string `json:"unitId"`
+	SubUnitIDs             *string `json:"subUnitIds"`
+	BrandID                *string `json:"brandId"`
+	CategoryID             *string `json:"categoryId"`
+	SubCategoryID          *string `json:"subCategoryId"`
+	LocationIDs            *string `json:"locationIds"`
+	AllLocations           *bool   `json:"allLocations"`
+	ProductType            *string `json:"productType"`
+	Unit                   *string `json:"unit"`
+	Brand                  *string `json:"brand"`
+	CategoryCode           *string `json:"categoryCode"`
+	SubCategoryCode        *string `json:"subCategoryCode"`
+	LocationCode           *string `json:"locationCode"`
+	ManageStock            *bool   `json:"manageStock"`
+	AlertQuantity          *string `json:"alertQuantity"`
+	IsForSelling           *bool   `json:"isForSelling"`
+	TaxType                *string `json:"taxType"`
+	TaxRate                *string `json:"taxRate"`
+	PurchasePriceExclusive *string `json:"purchasePriceExclusive"`
+	PurchasePriceInclusive *string `json:"purchasePriceInclusive"`
+	ProfitMargin           *string `json:"profitMargin"`
+	DefaultPurchasePrice   *string `json:"defaultPurchasePrice"`
+	DefaultSellingPrice    *string `json:"defaultSellingPrice"`
+	HasWarranty            *bool   `json:"hasWarranty"`
+	WarrantyDuration       *string `json:"warrantyDuration"`
+	WarrantyPeriod         *string `json:"warrantyPeriod"`
+	WarrantyCoverage       *string `json:"warrantyCoverage"`
+	Description            *string `json:"description"`
+	BrochureName           *string `json:"brochureName"`
+	BrochureUrl            *string `json:"brochureUrl"`
+	Images                 *string `json:"images"`
 }
 
 func UpdateProductImportRowRequestHandler(pool *pgxpool.Pool, authService *auth.Service) gin.HandlerFunc {
@@ -344,23 +361,40 @@ func UpdateProductImportRowRequestHandler(pool *pgxpool.Pool, authService *auth.
 		}
 
 		nextData := map[string]string{
-			"name":                   stringOrEmpty(payload.ProductName),
-			"sku":                    stringOrEmpty(payload.SKU),
-			"barcode":                stringOrEmpty(payload.Barcode),
-			"product_type":           stringOrEmpty(payload.ProductType),
-			"unit":                   stringOrEmpty(payload.Unit),
-			"brand":                  stringOrEmpty(payload.Brand),
-			"category_code":          stringOrEmpty(payload.CategoryCode),
-			"sub_category_code":      stringOrEmpty(payload.SubCategoryCode),
-			"location_code":          stringOrEmpty(payload.LocationCode),
-			"manage_stock":           boolString(payload.ManageStock),
-			"alert_quantity":         stringOrEmpty(payload.AlertQuantity),
-			"is_for_selling":         boolString(payload.IsForSelling),
-			"tax_type":               stringOrEmpty(payload.TaxType),
-			"tax_rate":               stringOrEmpty(payload.TaxRate),
-			"default_purchase_price": stringOrEmpty(payload.DefaultPurchasePrice),
-			"default_selling_price":  stringOrEmpty(payload.DefaultSellingPrice),
-			"description":            stringOrEmpty(payload.Description),
+			"name":                     stringOrEmpty(payload.ProductName),
+			"sku":                      stringOrEmpty(payload.SKU),
+			"barcode":                  stringOrEmpty(payload.Barcode),
+			"unit_id":                  stringOrEmpty(payload.UnitID),
+			"sub_unit_ids":             stringOrEmpty(payload.SubUnitIDs),
+			"brand_id":                 stringOrEmpty(payload.BrandID),
+			"category_id":              stringOrEmpty(payload.CategoryID),
+			"sub_category_id":          stringOrEmpty(payload.SubCategoryID),
+			"location_ids":             stringOrEmpty(payload.LocationIDs),
+			"all_locations":            boolString(payload.AllLocations),
+			"product_type":             stringOrEmpty(payload.ProductType),
+			"unit":                     stringOrEmpty(payload.Unit),
+			"brand":                    stringOrEmpty(payload.Brand),
+			"category_code":            stringOrEmpty(payload.CategoryCode),
+			"sub_category_code":        stringOrEmpty(payload.SubCategoryCode),
+			"location_code":            stringOrEmpty(payload.LocationCode),
+			"manage_stock":             boolString(payload.ManageStock),
+			"alert_quantity":           stringOrEmpty(payload.AlertQuantity),
+			"is_for_selling":           boolString(payload.IsForSelling),
+			"tax_type":                 stringOrEmpty(payload.TaxType),
+			"tax_rate":                 stringOrEmpty(payload.TaxRate),
+			"purchase_price_exclusive": stringOrEmpty(payload.PurchasePriceExclusive),
+			"purchase_price_inclusive": stringOrEmpty(payload.PurchasePriceInclusive),
+			"profit_margin":            stringOrEmpty(payload.ProfitMargin),
+			"default_purchase_price":   stringOrEmpty(payload.DefaultPurchasePrice),
+			"default_selling_price":    stringOrEmpty(payload.DefaultSellingPrice),
+			"has_warranty":             boolString(payload.HasWarranty),
+			"warranty_duration":        stringOrEmpty(payload.WarrantyDuration),
+			"warranty_period":          stringOrEmpty(payload.WarrantyPeriod),
+			"warranty_coverage":        stringOrEmpty(payload.WarrantyCoverage),
+			"description":              stringOrEmpty(payload.Description),
+			"brochure_name":            stringOrEmpty(payload.BrochureName),
+			"brochure_url":             stringOrEmpty(payload.BrochureUrl),
+			"images":                   stringOrEmpty(payload.Images),
 		}
 
 		updatedRow, validationErrors, err := repoproduct.UpdateProductImportBatchRowDataRepository(pool, businessID, batchID, rowID, nextData, user.ID)
@@ -417,6 +451,14 @@ func parseProductImportCSV(file io.Reader) ([]parsedProductImportRow, error) {
 				rowData[normalizedHeaders[idx]] = strings.TrimSpace(value)
 			}
 		}
+
+		rowData["name"] = firstNonEmpty(rowData["name"])
+		rowData["sku"] = firstNonEmpty(rowData["sku"], rowData["sku_code"])
+		rowData["unit"] = firstNonEmpty(rowData["unit"], rowData["unit_code"])
+		rowData["brand"] = firstNonEmpty(rowData["brand"], rowData["brand_name"], rowData["brand_code"])
+		rowData["category_code"] = firstNonEmpty(rowData["category_code"], rowData["category"])
+		rowData["sub_category_code"] = firstNonEmpty(rowData["sub_category_code"], rowData["sub_category"])
+		rowData["location_code"] = firstNonEmpty(rowData["location_code"], rowData["location"])
 
 		rowData["product_type"] = strings.ToLower(firstNonEmpty(rowData["product_type"], "single"))
 		rowData["tax_type"] = strings.ToLower(firstNonEmpty(rowData["tax_type"], "exclusive"))
