@@ -4,6 +4,7 @@ type Sale struct {
 	ID                    string  `json:"id"`
 	BusinessID            string  `json:"businessId"`
 	LocationID            string  `json:"locationId"`
+	CustomerID            string  `json:"customerId"`
 	ReferenceNumber       string  `json:"referenceNumber"`
 	SaleDate              string  `json:"saleDate"`
 	CustomerName          string  `json:"customerName"`
@@ -18,9 +19,55 @@ type Sale struct {
 	TotalQuantity         float64 `json:"totalQuantity"`
 	Notes                 string  `json:"notes"`
 	StockAccountingMethod string  `json:"stockAccountingMethod"`
+	ReserveOrderItems     bool    `json:"reserveOrderItems"`
+	ShippingStatus        string  `json:"shippingStatus"`
+	PaidAmount            float64 `json:"paidAmount"`
+	BalanceDue            float64 `json:"balanceDue"`
+	SaleID                string  `json:"saleId"`
+	ConvertedAt           string  `json:"convertedAt"`
 	CreatedBy             string  `json:"createdBy"`
 	CreatedAt             string  `json:"createdAt"`
 	UpdatedAt             string  `json:"updatedAt"`
+}
+
+type SalesOrderListItem struct {
+	ID              string  `json:"id"`
+	BusinessID      string  `json:"businessId"`
+	LocationID      string  `json:"locationId"`
+	CustomerID      string  `json:"customerId"`
+	LocationName    string  `json:"locationName"`
+	ReferenceNumber string  `json:"referenceNumber"`
+	SaleDate        string  `json:"saleDate"`
+	CustomerName    string  `json:"customerName"`
+	CustomerPhone   string  `json:"customerPhone"`
+	Status          string  `json:"status"`
+	ShippingStatus  string  `json:"shippingStatus"`
+	ItemsCount      int     `json:"itemsCount"`
+	GrandTotal      float64 `json:"grandTotal"`
+	PaidAmount      float64 `json:"paidAmount"`
+	BalanceDue      float64 `json:"balanceDue"`
+	SaleID          string  `json:"saleId"`
+	ConvertedAt     string  `json:"convertedAt"`
+	CreatedAt       string  `json:"createdAt"`
+	UpdatedAt       string  `json:"updatedAt"`
+}
+
+type SalesOrderFilters struct {
+	LocationID     string
+	CustomerID     string
+	Status         string
+	ShippingStatus string
+	DateFrom       string
+	DateTo         string
+	SearchQuery    string
+}
+
+type UpdateSalesOrderStatusInput struct {
+	BusinessID        string
+	SalesOrderID      string
+	Status            string
+	ReserveOrderItems bool
+	CreatedBy         string
 }
 
 type SaleItem struct {
@@ -76,6 +123,7 @@ type CreateSaleItemInput struct {
 type CreateSaleOrderInput struct {
 	BusinessID                string
 	LocationID                string
+	CustomerID                string
 	ReferenceNumber           string
 	SaleDate                  string
 	CustomerName              string

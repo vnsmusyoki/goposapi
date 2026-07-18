@@ -17,6 +17,7 @@ import (
 )
 
 type createSaleOrderPayload struct {
+	CustomerID        *string                      `json:"customer_id"`
 	CustomerName      *string                      `json:"customer_name"`
 	CustomerPhone     *string                      `json:"customer_phone"`
 	CustomerEmail     *string                      `json:"customer_email"`
@@ -52,6 +53,16 @@ type createSaleOrderItemPayload struct {
 type saleOrderResponse struct {
 	Sale    reposales.Sale `json:"sale"`
 	Message string         `json:"message,omitempty"`
+}
+
+type salesOrdersResponse struct {
+	SalesOrders []reposales.SalesOrderListItem `json:"salesOrders"`
+	Message     string                         `json:"message,omitempty"`
+}
+
+type updateSalesOrderStatusPayload struct {
+	Status            *string `json:"status"`
+	ReserveOrderItems *bool   `json:"reserve_order_items"`
 }
 
 func CreateSaleOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Service) gin.HandlerFunc {
@@ -127,6 +138,7 @@ func CreateSaleOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Service
 		sale, err := reposales.CreateSaleOrderRepository(pool, reposales.CreateSaleOrderInput{
 			BusinessID:                businessID,
 			LocationID:                derefString(payload.LocationID),
+			CustomerID:                derefString(payload.CustomerID),
 			ReferenceNumber:           derefString(payload.ReferenceNumber),
 			SaleDate:                  derefString(payload.SaleDate),
 			CustomerName:              derefString(payload.CustomerName),
@@ -160,6 +172,138 @@ func CreateSaleOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Service
 		c.JSON(http.StatusCreated, saleOrderResponse{
 			Sale:    *sale,
 			Message: "Sale order created successfully",
+		})
+	}
+}
+
+func ListSalesOrdersRequestHandler(pool *pgxpool.Pool, authService *auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, _, err := authService.CurrentUserFromRequest(c.Request.Context(), c.Request)
+		if err != nil {
+			log.Printf("list sales orders handler: auth lookup failed err=%v", err)
+			http.SetCookie(c.Writer, authService.ClearSessionCookie())
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Session expired. Please log in again."})
+			return
+		}
+
+		if !hasBusinessRole(user.Roles) {
+			c.JSON(http.StatusForbidden, gin.H{"message": "Business access is required"})
+			return
+		}
+
+		businessID := strings.TrimSpace(user.ActiveBusinessID)
+		if businessID == "" {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"business_id": "Active business could not be resolved.",
+			}))
+			return
+		}
+
+		filters := reposales.SalesOrderFilters{
+			LocationID:     strings.TrimSpace(c.Query("location_id")),
+			CustomerID:     strings.TrimSpace(c.Query("customer_id")),
+			Status:         strings.TrimSpace(c.Query("status")),
+			ShippingStatus: strings.TrimSpace(c.Query("shipping_status")),
+			DateFrom:       strings.TrimSpace(c.Query("date_from")),
+			DateTo:         strings.TrimSpace(c.Query("date_to")),
+			SearchQuery:    strings.TrimSpace(c.Query("search_query")),
+		}
+
+		orders, err := reposales.ListSalesOrdersRepository(pool, businessID, filters)
+		if err != nil {
+			switch err {
+			case reposales.ErrBusinessNotResolved:
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"business_id": "Active business could not be resolved.",
+				}))
+			default:
+				log.Printf("list sales orders handler: repository failed business_id=%s err=%v", businessID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load sales orders"})
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, salesOrdersResponse{
+			SalesOrders: orders,
+			Message:     "Sales orders loaded successfully",
+		})
+	}
+}
+
+func UpdateSalesOrderStatusRequestHandler(pool *pgxpool.Pool, authService *auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, _, err := authService.CurrentUserFromRequest(c.Request.Context(), c.Request)
+		if err != nil {
+			log.Printf("update sales order status handler: auth lookup failed err=%v", err)
+			http.SetCookie(c.Writer, authService.ClearSessionCookie())
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Session expired. Please log in again."})
+			return
+		}
+
+		if !hasBusinessRole(user.Roles) {
+			c.JSON(http.StatusForbidden, gin.H{"message": "Business access is required"})
+			return
+		}
+
+		businessID := strings.TrimSpace(user.ActiveBusinessID)
+		salesOrderID := strings.TrimSpace(c.Param("id"))
+		if businessID == "" || salesOrderID == "" {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"form": "Sales order id is required.",
+			}))
+			return
+		}
+
+		body, err := c.GetRawData()
+		if err != nil && !errors.Is(err, io.EOF) {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"form": "Unable to read request body.",
+			}))
+			return
+		}
+
+		var payload updateSalesOrderStatusPayload
+		if err := json.Unmarshal(body, &payload); err != nil {
+			log.Printf("update sales order status handler: invalid json err=%v body=%s", err, string(body))
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"form": "Request body must be valid JSON.",
+			}))
+			return
+		}
+
+		status := strings.TrimSpace(derefString(payload.Status))
+		if !allowedSaleStatuses[strings.ToLower(status)] {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"status": "A valid status is required.",
+			}))
+			return
+		}
+
+		updated, err := reposales.UpdateSalesOrderStatusRepository(pool, reposales.UpdateSalesOrderStatusInput{
+			BusinessID:        businessID,
+			SalesOrderID:      salesOrderID,
+			Status:            status,
+			ReserveOrderItems: derefBool(payload.ReserveOrderItems),
+			CreatedBy:         user.ID,
+		})
+		if err != nil {
+			switch err {
+			case reposales.ErrBusinessNotResolved:
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"business_id": "Active business could not be resolved.",
+				}))
+			case reposales.ErrSaleNotFound:
+				c.JSON(http.StatusNotFound, gin.H{"message": "Sales order not found"})
+			default:
+				log.Printf("update sales order status handler: repository failed business_id=%s sales_order_id=%s err=%v", businessID, salesOrderID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update sales order status"})
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, saleOrderResponse{
+			Sale:    *updated,
+			Message: "Sales order status updated successfully",
 		})
 	}
 }

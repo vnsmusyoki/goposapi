@@ -1,0 +1,2 @@
+ALTER TABLE sales_orders
+    ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(14,4) NOT NULL DEFAULT 0;

@@ -17,6 +17,7 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 
 	req.BusinessID = strings.TrimSpace(req.BusinessID)
 	req.LocationID = strings.TrimSpace(req.LocationID)
+	req.CustomerID = strings.TrimSpace(req.CustomerID)
 	req.ReferenceNumber = strings.TrimSpace(req.ReferenceNumber)
 	req.SaleDate = strings.TrimSpace(req.SaleDate)
 	req.CustomerName = strings.TrimSpace(req.CustomerName)
@@ -48,9 +49,10 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 
 	var saleID string
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO sales (
+		INSERT INTO sales_orders (
 			business_id,
 			location_id,
+			customer_id,
 			reference_number,
 			sale_date,
 			customer_name,
@@ -65,13 +67,14 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 			total_quantity,
 			notes,
 			stock_accounting_method,
+			reserve_order_items,
 			created_by
 		) VALUES (
 			$1::uuid,
 			$2::uuid,
-			$3,
-			$4::timestamptz,
-			$5,
+			NULLIF($3, '')::uuid,
+			$4,
+			$5::timestamptz,
 			$6,
 			$7,
 			$8,
@@ -83,15 +86,14 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 			$14,
 			$15,
 			$16,
-			NULLIF($17, '')::uuid
+			$17,
+			$18,
+			NULLIF($19, '')::uuid
 		)
 		RETURNING id::text
-	`, req.BusinessID, req.LocationID, req.ReferenceNumber, req.SaleDate, req.CustomerName, req.CustomerPhone, req.CustomerEmail, req.Status, req.Subtotal, req.TotalDiscount, req.TotalTax, req.GrandTotal, req.ItemsCount, req.TotalQuantity, req.Notes, req.StockAccountingMethod, req.CreatedBy).Scan(&saleID); err != nil {
+	`, req.BusinessID, req.LocationID, req.CustomerID, req.ReferenceNumber, req.SaleDate, req.CustomerName, req.CustomerPhone, req.CustomerEmail, req.Status, req.Subtotal, req.TotalDiscount, req.TotalTax, req.GrandTotal, req.ItemsCount, req.TotalQuantity, req.Notes, req.StockAccountingMethod, req.ReserveOrderItems, req.CreatedBy).Scan(&saleID); err != nil {
 		return nil, fmt.Errorf("insert sale: %w", err)
 	}
-
-	consumesInventory := saleStatusConsumesInventory(req.Status)
-	reservesInventory := req.ReserveOrderItems && saleStatusReservesInventory(req.Status)
 
 	for idx, item := range req.Items {
 		productName, sku, unitName, err := loadSaleProductSnapshotTx(ctx, tx, req.BusinessID, item.ProductID)
@@ -99,11 +101,11 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 			return nil, err
 		}
 
-		batchTrackingEnabled := consumesInventory || reservesInventory
+		batchTrackingEnabled := true
 		var saleItemID string
 		if err := tx.QueryRow(ctx, `
-			INSERT INTO sale_items (
-				sale_id,
+			INSERT INTO sales_order_items (
+				sales_order_id,
 				business_id,
 				product_id,
 				product_name,
@@ -143,14 +145,8 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 			return nil, fmt.Errorf("insert sale item: %w", err)
 		}
 
-		if batchTrackingEnabled {
-			mode := "consume"
-			if reservesInventory {
-				mode = "reserve"
-			}
-			if err := applySaleInventoryAllocationTx(ctx, tx, req, item, saleID, saleItemID, productName, sku, unitName, mode); err != nil {
-				return nil, err
-			}
+		if err := applySalesOrderInventoryAllocationTx(ctx, tx, req, item, saleID, saleItemID, productName, sku, unitName, req.Status == "approved" && req.ReserveOrderItems); err != nil {
+			return nil, err
 		}
 	}
 
@@ -174,6 +170,7 @@ func GetSaleByIDRepositoryTx(ctx context.Context, querier interface {
 			id::text,
 			business_id::text,
 			location_id::text,
+			COALESCE(customer_id::text, ''),
 			reference_number,
 			sale_date::text,
 			COALESCE(customer_name, ''),
@@ -188,10 +185,13 @@ func GetSaleByIDRepositoryTx(ctx context.Context, querier interface {
 			total_quantity,
 			COALESCE(notes, ''),
 			COALESCE(stock_accounting_method, ''),
+			COALESCE(reserve_order_items, FALSE),
+			COALESCE(sale_id::text, ''),
+			COALESCE(converted_at::text, ''),
 			COALESCE(created_by::text, ''),
 			created_at::text,
 			updated_at::text
-		FROM sales
+		FROM sales_orders
 		WHERE business_id = $1::uuid
 		  AND id = $2::uuid
 		  AND deleted_at IS NULL
@@ -203,6 +203,7 @@ func GetSaleByIDRepositoryTx(ctx context.Context, querier interface {
 		&sale.ID,
 		&sale.BusinessID,
 		&sale.LocationID,
+		&sale.CustomerID,
 		&sale.ReferenceNumber,
 		&sale.SaleDate,
 		&sale.CustomerName,
@@ -217,6 +218,9 @@ func GetSaleByIDRepositoryTx(ctx context.Context, querier interface {
 		&sale.TotalQuantity,
 		&sale.Notes,
 		&sale.StockAccountingMethod,
+		&sale.ReserveOrderItems,
+		&sale.SaleID,
+		&sale.ConvertedAt,
 		&sale.CreatedBy,
 		&sale.CreatedAt,
 		&sale.UpdatedAt,

@@ -134,6 +134,8 @@ func main() {
 	api.PUT("/purchases/orders/:id", purchaseorderhandler.UpdatePurchaseOrderRequestHandler(pool, authService))
 	api.DELETE("/purchases/orders/:id", purchaseorderhandler.DeletePurchaseOrderRequestHandler(pool, authService))
 	api.POST("/sales/orders", saleshandler.CreateSaleOrderRequestHandler(pool, authService))
+	api.GET("/sales/orders", saleshandler.ListSalesOrdersRequestHandler(pool, authService))
+	api.PATCH("/sales/orders/:id/status", saleshandler.UpdateSalesOrderStatusRequestHandler(pool, authService))
 	api.GET("/business/settings", settingshandler.GetBusinessSettingsRequestHandler(pool, authService))
 	api.PUT("/business/settings", settingshandler.UpdateBusinessSettingsRequestHandler(pool, authService))
 	api.GET("/business/settings/invoice", settingshandler.GetBusinessInvoiceSettingsRequestHandler(pool, authService))
