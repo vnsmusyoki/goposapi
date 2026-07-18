@@ -1,0 +1,2 @@
+ALTER TABLE sales
+    ADD COLUMN IF NOT EXISTS stock_accounting_method VARCHAR(50) NOT NULL DEFAULT 'FIFO';

@@ -26,6 +26,7 @@ type updateBusinessSettingsPayload struct {
 	LogoURL                 *string  `json:"logoUrl"`
 	FinancialYearStartMonth *string  `json:"financialYearStartMonth"`
 	StockAccountingMethod   *string  `json:"stockAccountingMethod"`
+	PreserveSaleOrderRequests *bool   `json:"preserveSaleOrderRequests"`
 	TransactionEditDays     *int     `json:"transactionEditDays"`
 	DateFormat              *string  `json:"dateFormat"`
 	TimeFormat              *string  `json:"timeFormat"`
@@ -44,6 +45,7 @@ type BusinessSettingsResponse struct {
 	LogoURL                 string   `json:"logoUrl"`
 	FinancialYearStartMonth string   `json:"financialYearStartMonth"`
 	StockAccountingMethod   string   `json:"stockAccountingMethod"`
+	PreserveSaleOrderRequests bool   `json:"preserveSaleOrderRequests"`
 	TransactionEditDays     *int     `json:"transactionEditDays,omitempty"`
 	DateFormat              string   `json:"dateFormat"`
 	TimeFormat              string   `json:"timeFormat"`
@@ -166,6 +168,7 @@ func UpdateBusinessSettingsRequestHandler(pool *pgxpool.Pool, authService *auth.
 			LogoURL:                 derefString(payload.LogoURL),
 			FinancialYearStartMonth: strings.TrimSpace(*payload.FinancialYearStartMonth),
 			StockAccountingMethod:   strings.TrimSpace(*payload.StockAccountingMethod),
+			PreserveSaleOrderRequests: boolValue(payload.PreserveSaleOrderRequests),
 			TransactionEditDays:     *payload.TransactionEditDays,
 			DateFormat:              strings.TrimSpace(*payload.DateFormat),
 			TimeFormat:              strings.TrimSpace(*payload.TimeFormat),
@@ -232,6 +235,10 @@ func businessSettingsFieldErrors(payload *updateBusinessSettingsPayload) map[str
 		errs["stockAccountingMethod"] = "Stock accounting method is required."
 	}
 
+	if payload == nil || payload.PreserveSaleOrderRequests == nil {
+		errs["preserveSaleOrderRequests"] = "Preserve sale order requests is required."
+	}
+
 	if payload == nil || payload.TransactionEditDays == nil {
 		errs["transactionEditDays"] = "Transaction edit days is required."
 	} else if *payload.TransactionEditDays < 0 {
@@ -278,6 +285,7 @@ func toBusinessSettingsResponse(settings *models.BusinessSettings, message strin
 		LogoURL:                 settings.LogoURL,
 		FinancialYearStartMonth: settings.FinancialYearStartMonth,
 		StockAccountingMethod:   settings.StockAccountingMethod,
+		PreserveSaleOrderRequests: settings.PreserveSaleOrderRequests,
 		DateFormat:              settings.DateFormat,
 		TimeFormat:              settings.TimeFormat,
 		Message:                 message,
@@ -369,6 +377,7 @@ var allowedMonths = map[string]bool{
 
 var allowedStockMethods = map[string]bool{
 	"FIFO":         true,
+	"FEFO":         true,
 	"LIFO":         true,
 	"Average Cost": true,
 }

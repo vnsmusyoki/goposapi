@@ -1,0 +1,257 @@
+package sales
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"log"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"pos/internal/auth"
+	reposales "pos/internal/repository/business/sales"
+	reposettings "pos/internal/repository/business/settings"
+)
+
+type createSaleOrderPayload struct {
+	CustomerName      *string                      `json:"customer_name"`
+	CustomerPhone     *string                      `json:"customer_phone"`
+	CustomerEmail     *string                      `json:"customer_email"`
+	ReferenceNumber   *string                      `json:"reference_number"`
+	SaleDate          *string                      `json:"sale_date"`
+	LocationID        *string                      `json:"location_id"`
+	Notes             *string                      `json:"notes"`
+	Status            *string                      `json:"status"`
+	Subtotal          *float64                     `json:"subtotal"`
+	TotalDiscount     *float64                     `json:"total_discount"`
+	TotalTax          *float64                     `json:"total_tax"`
+	GrandTotal        *float64                     `json:"grand_total"`
+	ReserveOrderItems *bool                        `json:"reserve_order_items"`
+	ItemsCount        *int                         `json:"items_count"`
+	TotalQuantity     *float64                     `json:"total_quantity"`
+	Items             []createSaleOrderItemPayload `json:"items"`
+}
+
+type createSaleOrderItemPayload struct {
+	ProductID            *string  `json:"product_id"`
+	Quantity             *float64 `json:"quantity"`
+	UnitCost             *float64 `json:"unit_cost"`
+	DiscountPercentage   *float64 `json:"discount_percentage"`
+	DiscountAmount       *float64 `json:"discount_amount"`
+	TaxRate              *float64 `json:"tax_rate"`
+	TaxAmount            *float64 `json:"tax_amount"`
+	UnitPrice            *float64 `json:"unit_price"`
+	LineTotal            *float64 `json:"line_total"`
+	BatchTrackingEnabled *bool    `json:"batch_tracking_enabled"`
+	SortOrder            *int     `json:"sort_order"`
+}
+
+type saleOrderResponse struct {
+	Sale    reposales.Sale `json:"sale"`
+	Message string         `json:"message,omitempty"`
+}
+
+func CreateSaleOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, _, err := authService.CurrentUserFromRequest(c.Request.Context(), c.Request)
+		if err != nil {
+			log.Printf("create sale order handler: auth lookup failed err=%v", err)
+			http.SetCookie(c.Writer, authService.ClearSessionCookie())
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Session expired. Please log in again."})
+			return
+		}
+
+		if !hasBusinessRole(user.Roles) {
+			c.JSON(http.StatusForbidden, gin.H{"message": "Business access is required"})
+			return
+		}
+
+		businessID := strings.TrimSpace(user.ActiveBusinessID)
+		if businessID == "" {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"business_id": "Active business could not be resolved.",
+			}))
+			return
+		}
+
+		body, err := c.GetRawData()
+		if err != nil && !errors.Is(err, io.EOF) {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"form": "Unable to read request body.",
+			}))
+			return
+		}
+
+		var payload createSaleOrderPayload
+		if err := json.Unmarshal(body, &payload); err != nil {
+			log.Printf("create sale order handler: invalid json err=%v body=%s", err, string(body))
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"form": "Request body must be valid JSON.",
+			}))
+			return
+		}
+
+		errs := saleOrderFieldErrors(&payload)
+		if len(errs) > 0 {
+			c.JSON(http.StatusBadRequest, validationFailed(errs))
+			return
+		}
+
+		settings, err := reposettings.GetBusinessSettingsRepository(pool, businessID)
+		if err != nil {
+			log.Printf("create sale order handler: load settings failed business_id=%s err=%v", businessID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load business settings"})
+			return
+		}
+
+		items := make([]reposales.CreateSaleItemInput, 0, len(payload.Items))
+		for idx, item := range payload.Items {
+			items = append(items, reposales.CreateSaleItemInput{
+				ProductID:            strings.TrimSpace(derefString(item.ProductID)),
+				Quantity:             derefFloat(item.Quantity),
+				UnitCost:             derefFloat(item.UnitCost),
+				DiscountPercentage:   derefFloat(item.DiscountPercentage),
+				DiscountAmount:       derefFloat(item.DiscountAmount),
+				TaxRate:              derefFloat(item.TaxRate),
+				TaxAmount:            derefFloat(item.TaxAmount),
+				UnitPrice:            derefFloat(item.UnitPrice),
+				LineTotal:            derefFloat(item.LineTotal),
+				BatchTrackingEnabled: derefBool(item.BatchTrackingEnabled),
+				SortOrder:            derefInt(item.SortOrder, idx),
+			})
+		}
+
+		sale, err := reposales.CreateSaleOrderRepository(pool, reposales.CreateSaleOrderInput{
+			BusinessID:                businessID,
+			LocationID:                derefString(payload.LocationID),
+			ReferenceNumber:           derefString(payload.ReferenceNumber),
+			SaleDate:                  derefString(payload.SaleDate),
+			CustomerName:              derefString(payload.CustomerName),
+			CustomerPhone:             derefString(payload.CustomerPhone),
+			CustomerEmail:             derefString(payload.CustomerEmail),
+			Status:                    derefString(payload.Status),
+			Notes:                     derefString(payload.Notes),
+			StockAccountingMethod:     settings.StockAccountingMethod,
+			PreserveSaleOrderRequests: settings.PreserveSaleOrderRequests,
+			ReserveOrderItems:         reserveOrderItemsValue(payload.ReserveOrderItems, settings.PreserveSaleOrderRequests),
+			CreatedBy:                 user.ID,
+			Items:                     items,
+			Subtotal:                  derefFloat(payload.Subtotal),
+			TotalDiscount:             derefFloat(payload.TotalDiscount),
+			TotalTax:                  derefFloat(payload.TotalTax),
+			GrandTotal:                derefFloat(payload.GrandTotal),
+			ItemsCount:                derefInt(payload.ItemsCount, len(items)),
+			TotalQuantity:             derefFloat(payload.TotalQuantity),
+		})
+		if err != nil {
+			switch {
+			case errors.Is(err, reposales.ErrInvalidSaleInput):
+				c.JSON(http.StatusBadRequest, validationFailed(saleOrderFieldErrors(&payload)))
+			default:
+				log.Printf("create sale order handler: repository failed business_id=%s err=%v", businessID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to create sale order"})
+			}
+			return
+		}
+
+		c.JSON(http.StatusCreated, saleOrderResponse{
+			Sale:    *sale,
+			Message: "Sale order created successfully",
+		})
+	}
+}
+
+func saleOrderFieldErrors(payload *createSaleOrderPayload) map[string]string {
+	errs := map[string]string{}
+	if payload == nil || payload.CustomerName == nil || strings.TrimSpace(*payload.CustomerName) == "" {
+		errs["customer_name"] = "Customer is required."
+	}
+	if payload == nil || payload.LocationID == nil || strings.TrimSpace(*payload.LocationID) == "" {
+		errs["location_id"] = "Location is required."
+	}
+	if payload == nil || payload.SaleDate == nil || strings.TrimSpace(*payload.SaleDate) == "" {
+		errs["sale_date"] = "Sale date is required."
+	}
+	if payload == nil || payload.Status == nil || !allowedSaleStatuses[strings.ToLower(strings.TrimSpace(derefString(payload.Status)))] {
+		errs["status"] = "Status is required."
+	}
+	if payload == nil || len(payload.Items) == 0 {
+		errs["items"] = "Add at least one item to the sale order."
+	}
+	for idx, item := range payload.Items {
+		if item.ProductID == nil || strings.TrimSpace(*item.ProductID) == "" {
+			errs[formatSaleOrderItemKey(idx, "product_id")] = "Product is required."
+		}
+		if item.Quantity == nil || *item.Quantity <= 0 {
+			errs[formatSaleOrderItemKey(idx, "quantity")] = "Quantity must be greater than zero."
+		}
+	}
+	return errs
+}
+
+func formatSaleOrderItemKey(index int, field string) string {
+	return "items[" + strconv.Itoa(index) + "]." + field
+}
+
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func derefFloat(value *float64) float64 {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func derefInt(value *int, fallback int) int {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func derefBool(value *bool) bool {
+	if value == nil {
+		return false
+	}
+	return *value
+}
+
+func reserveOrderItemsValue(value *bool, fallback bool) bool {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func validationFailed(errorsMap map[string]string) gin.H {
+	if len(errorsMap) == 0 {
+		errorsMap = map[string]string{"form": "Validation failed."}
+	}
+	return gin.H{"message": "Validation failed", "errors": errorsMap}
+}
+
+func hasBusinessRole(roles []auth.RoleResponse) bool {
+	for _, role := range roles {
+		if strings.EqualFold(strings.TrimSpace(role.Code), "business") {
+			return true
+		}
+	}
+	return false
+}
+
+var allowedSaleStatuses = map[string]bool{
+	"draft":              true,
+	"pending_approval":   true,
+	"approved":           true,
+	"processing":         true,
+	"ready_for_shipment": true,
+	"completed":          true,
+}

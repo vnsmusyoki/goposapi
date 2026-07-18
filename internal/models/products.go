@@ -11,12 +11,18 @@ type Product struct {
 }
 
 type ProductSearchItem struct {
-	ID           string  `json:"id" db:"id"`
-	Name         string  `json:"name" db:"name"`
-	SKU          *string `json:"sku" db:"sku"`
-	UnitName     string  `json:"unitName" db:"unit_name"`
-	SellingPrice float64 `json:"sellingPrice" db:"selling_price"`
-	ProductType  string  `json:"productType" db:"product_type"`
+	ID                    string  `json:"id" db:"id"`
+	Name                  string  `json:"name" db:"name"`
+	SKU                   *string `json:"sku" db:"sku"`
+	UnitName              string  `json:"unitName" db:"unit_name"`
+	SellingPrice          float64 `json:"sellingPrice" db:"selling_price"`
+	CurrentStock          int     `json:"currentStock" db:"current_stock"`
+	TaxType               string  `json:"taxType" db:"tax_type"`
+	TaxRate               float64 `json:"taxRate" db:"tax_rate"`
+	DefaultPurchasePrice  float64 `json:"defaultPurchasePrice" db:"default_purchase_price"`
+	PurchasePriceExclusive float64 `json:"purchasePriceExclusive" db:"purchase_price_exclusive"`
+	PurchasePriceInclusive float64 `json:"purchasePriceInclusive" db:"purchase_price_inclusive"`
+	ProductType           string  `json:"productType" db:"product_type"`
 }
 
 type ProductListItem struct {
@@ -42,6 +48,7 @@ type ProductListItem struct {
 	TaxType               string   `json:"taxType" db:"tax_type"`
 	TaxRate               float64  `json:"taxRate" db:"tax_rate"`
 	DefaultPurchasePrice  float64  `json:"defaultPurchasePrice" db:"default_purchase_price"`
+	ProfitAmount          float64  `json:"profitAmount" db:"profit_amount"`
 	DefaultSellingPrice   float64  `json:"defaultSellingPrice" db:"default_selling_price"`
 	ProfitMargin          float64  `json:"profitMargin" db:"profit_margin"`
 	CurrentStock          int      `json:"currentStock" db:"current_stock"`
@@ -107,6 +114,7 @@ type ProductDetail struct {
 	TaxRate                 float64            `json:"taxRate"`
 	DefaultPurchasePrice    float64            `json:"defaultPurchasePrice"`
 	PurchasePriceExclusive  float64            `json:"purchasePriceExclusive"`
+	ProfitAmount            float64            `json:"profitAmount"`
 	PurchasePriceInclusive  float64            `json:"purchasePriceInclusive"`
 	ProfitMargin            float64            `json:"profitMargin"`
 	DefaultSellingPrice     float64            `json:"defaultSellingPrice"`

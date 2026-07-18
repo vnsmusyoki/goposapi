@@ -38,6 +38,7 @@ func GetBusinessSettingsRepository(pool *pgxpool.Pool, businessID string) (*mode
 			COALESCE(logo_url, ''),
 			COALESCE(financial_year_start_month, ''),
 			COALESCE(stock_accounting_method, ''),
+			COALESCE(preserve_sale_order_requests, FALSE),
 			transaction_edit_days,
 			COALESCE(date_format, ''),
 			COALESCE(time_format, ''),
@@ -57,6 +58,7 @@ func GetBusinessSettingsRepository(pool *pgxpool.Pool, businessID string) (*mode
 		&settings.LogoURL,
 		&settings.FinancialYearStartMonth,
 		&settings.StockAccountingMethod,
+		&settings.PreserveSaleOrderRequests,
 		&transactionEditDays,
 		&settings.DateFormat,
 		&settings.TimeFormat,
@@ -130,13 +132,14 @@ func UpdateBusinessSettingsRepository(pool *pgxpool.Pool, req UpdateBusinessSett
 			logo_url = $8,
 			financial_year_start_month = $9,
 			stock_accounting_method = $10,
-			transaction_edit_days = $11,
-			date_format = $12,
-			time_format = $13,
-			currency_precision = $14,
-			quantity_precision = $15
+			preserve_sale_order_requests = $11,
+			transaction_edit_days = $12,
+			date_format = $13,
+			time_format = $14,
+			currency_precision = $15,
+			quantity_precision = $16
 		WHERE id = $1
-	`, req.BusinessID, req.Name, req.StartDate, req.DefaultProfitPercentage, req.Currency, req.CurrencySymbolPlacement, req.Timezone, nullIfBlank(req.LogoURL), req.FinancialYearStartMonth, req.StockAccountingMethod, req.TransactionEditDays, req.DateFormat, req.TimeFormat, req.CurrencyPrecision, req.QuantityPrecision)
+	`, req.BusinessID, req.Name, req.StartDate, req.DefaultProfitPercentage, req.Currency, req.CurrencySymbolPlacement, req.Timezone, nullIfBlank(req.LogoURL), req.FinancialYearStartMonth, req.StockAccountingMethod, req.PreserveSaleOrderRequests, req.TransactionEditDays, req.DateFormat, req.TimeFormat, req.CurrencyPrecision, req.QuantityPrecision)
 	if err != nil {
 		return nil, fmt.Errorf("update business settings: %w", err)
 	}

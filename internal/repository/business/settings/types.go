@@ -11,6 +11,7 @@ type UpdateBusinessSettingsInput struct {
 	LogoURL                 string
 	FinancialYearStartMonth string
 	StockAccountingMethod   string
+	PreserveSaleOrderRequests bool
 	TransactionEditDays     int
 	DateFormat              string
 	TimeFormat              string

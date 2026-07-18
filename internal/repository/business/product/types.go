@@ -141,6 +141,7 @@ type ProductDetail struct {
 	TaxRate                 float64
 	DefaultPurchasePrice    float64
 	PurchasePriceExclusive  float64
+	ProfitAmount            float64
 	PurchasePriceInclusive  float64
 	ProfitMargin            float64
 	DefaultSellingPrice     float64

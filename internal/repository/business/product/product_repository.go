@@ -152,7 +152,7 @@ func CreateProductRepository(pool *pgxpool.Pool, req CreateProductInput) (*model
 			NULLIF($6, '')::uuid,
 			NULLIF($7, '')::uuid,
 			NULLIF($8, '')::uuid,
-			NULLIF($9, '')::integer,
+			NULLIF($9, '')::uuid,
 			$10,$11,$12,$13,$14,
 			$15,$16,$17,$18,$19,
 			NULLIF($20, ''),
@@ -348,7 +348,7 @@ func GetProductByIDRepository(pool *pgxpool.Pool, businessID, productID string) 
 	var sku sql.NullString
 	var alertQuantity sql.NullInt64
 	var taxRate float64
-	var defaultPurchasePrice, purchasePriceExclusive, purchasePriceInclusive, profitMargin, defaultSellingPrice float64
+	var defaultPurchasePrice, purchasePriceExclusive, profitAmount, purchasePriceInclusive, profitMargin, defaultSellingPrice float64
 	var description sql.NullString
 	var warrantyDuration sql.NullString
 	var warrantyPeriod sql.NullString
@@ -386,6 +386,7 @@ func GetProductByIDRepository(pool *pgxpool.Pool, businessID, productID string) 
 			COALESCE(p.tax_rate, 0),
 			COALESCE(p.default_purchase_price, 0),
 			COALESCE(p.purchase_price_exclusive, 0),
+			COALESCE(p.profit_amount, 0),
 			COALESCE(p.purchase_price_inclusive, 0),
 			COALESCE(p.profit_margin, 0),
 			COALESCE(p.default_selling_price, 0),
@@ -448,6 +449,7 @@ func GetProductByIDRepository(pool *pgxpool.Pool, businessID, productID string) 
 		&taxRate,
 		&defaultPurchasePrice,
 		&purchasePriceExclusive,
+		&profitAmount,
 		&purchasePriceInclusive,
 		&profitMargin,
 		&defaultSellingPrice,
@@ -478,6 +480,7 @@ func GetProductByIDRepository(pool *pgxpool.Pool, businessID, productID string) 
 	detail.TaxRate = taxRate
 	detail.DefaultPurchasePrice = defaultPurchasePrice
 	detail.PurchasePriceExclusive = purchasePriceExclusive
+	detail.ProfitAmount = profitAmount
 	detail.PurchasePriceInclusive = purchasePriceInclusive
 	detail.ProfitMargin = profitMargin
 	detail.DefaultSellingPrice = defaultSellingPrice
@@ -1067,9 +1070,21 @@ func SearchProductsRepository(pool *pgxpool.Pool, businessID, query, productType
 			p.sku,
 			COALESCE(u.name, '') AS unit_name,
 			COALESCE(p.default_selling_price, 0) AS selling_price,
+			COALESCE(stock.current_stock, 0) AS current_stock,
+			COALESCE(p.tax_type, 'exclusive') AS tax_type,
+			COALESCE(p.tax_rate, 0) AS tax_rate,
+			COALESCE(p.default_purchase_price, 0) AS default_purchase_price,
+			COALESCE(p.purchase_price_exclusive, 0) AS purchase_price_exclusive,
+			COALESCE(p.purchase_price_inclusive, 0) AS purchase_price_inclusive,
 			p.product_type
 		FROM products p
 		LEFT JOIN business_units u ON u.id = p.unit_id
+		LEFT JOIN LATERAL (
+			SELECT COALESCE(ROUND(SUM(ib.quantity_available)), 0)::int AS current_stock
+			FROM inventory_balances ib
+			WHERE ib.business_id = p.business_id
+			  AND ib.product_id = p.id
+		) stock ON TRUE
 		%s
 		ORDER BY p.created_at DESC, p.name ASC
 		LIMIT 20
@@ -1083,7 +1098,20 @@ func SearchProductsRepository(pool *pgxpool.Pool, businessID, query, productType
 	for rows.Next() {
 		var item models.ProductSearchItem
 		var sku sql.NullString
-		if err := rows.Scan(&item.ID, &item.Name, &sku, &item.UnitName, &item.SellingPrice, &item.ProductType); err != nil {
+		if err := rows.Scan(
+			&item.ID,
+			&item.Name,
+			&sku,
+			&item.UnitName,
+			&item.SellingPrice,
+			&item.CurrentStock,
+			&item.TaxType,
+			&item.TaxRate,
+			&item.DefaultPurchasePrice,
+			&item.PurchasePriceExclusive,
+			&item.PurchasePriceInclusive,
+			&item.ProductType,
+		); err != nil {
 			return nil, fmt.Errorf("scan product search item: %w", err)
 		}
 		item.SKU = models.StringPtrFromNullString(sku)

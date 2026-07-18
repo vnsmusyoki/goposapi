@@ -11,6 +11,7 @@ type BusinessSettings struct {
 	LogoURL                 string   `json:"logoUrl"`
 	FinancialYearStartMonth string   `json:"financialYearStartMonth"`
 	StockAccountingMethod   string   `json:"stockAccountingMethod"`
+	PreserveSaleOrderRequests bool   `json:"preserveSaleOrderRequests"`
 	TransactionEditDays     *int     `json:"transactionEditDays,omitempty"`
 	DateFormat              string   `json:"dateFormat"`
 	TimeFormat              string   `json:"timeFormat"`

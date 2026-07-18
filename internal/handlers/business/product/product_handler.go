@@ -96,12 +96,18 @@ type createProductResponse struct {
 }
 
 type productSearchResponse struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	SKU          *string `json:"sku"`
-	UnitName     string  `json:"unitName"`
-	SellingPrice float64 `json:"sellingPrice"`
-	ProductType  string  `json:"productType"`
+	ID                     string  `json:"id"`
+	Name                   string  `json:"name"`
+	SKU                    *string `json:"sku"`
+	UnitName               string  `json:"unitName"`
+	SellingPrice           float64 `json:"sellingPrice"`
+	CurrentStock           int     `json:"currentStock"`
+	TaxType                string  `json:"taxType"`
+	TaxRate                float64 `json:"taxRate"`
+	DefaultPurchasePrice   float64 `json:"defaultPurchasePrice"`
+	PurchasePriceExclusive float64 `json:"purchasePriceExclusive"`
+	PurchasePriceInclusive float64 `json:"purchasePriceInclusive"`
+	ProductType            string  `json:"productType"`
 }
 
 type productListItemResponse struct {
@@ -127,6 +133,7 @@ type productListItemResponse struct {
 	TaxType               string   `json:"taxType"`
 	TaxRate               float64  `json:"taxRate"`
 	DefaultPurchasePrice  float64  `json:"defaultPurchasePrice"`
+	ProfitAmount          float64  `json:"profitAmount"`
 	DefaultSellingPrice   float64  `json:"defaultSellingPrice"`
 	ProfitMargin          float64  `json:"profitMargin"`
 	CurrentStock          int      `json:"currentStock"`
@@ -160,6 +167,7 @@ type productDetailResponse struct {
 	TaxRate                 float64                            `json:"taxRate"`
 	DefaultPurchasePrice    float64                            `json:"defaultPurchasePrice"`
 	PurchasePriceExclusive  float64                            `json:"purchasePriceExclusive"`
+	ProfitAmount            float64                            `json:"profitAmount"`
 	PurchasePriceInclusive  float64                            `json:"purchasePriceInclusive"`
 	ProfitMargin            float64                            `json:"profitMargin"`
 	DefaultSellingPrice     float64                            `json:"defaultSellingPrice"`
@@ -224,6 +232,7 @@ func mapProductDetailResponse(detail *repoproduct.ProductDetail) productDetailRe
 			TaxType:               detail.TaxType,
 			TaxRate:               detail.TaxRate,
 			DefaultPurchasePrice:  detail.DefaultPurchasePrice,
+			ProfitAmount:          detail.ProfitAmount,
 			DefaultSellingPrice:   detail.DefaultSellingPrice,
 			ProfitMargin:          detail.ProfitMargin,
 			CurrentStock:          detail.CurrentStock,
@@ -249,6 +258,7 @@ func mapProductDetailResponse(detail *repoproduct.ProductDetail) productDetailRe
 		TaxRate:                 detail.TaxRate,
 		DefaultPurchasePrice:    detail.DefaultPurchasePrice,
 		PurchasePriceExclusive:  detail.PurchasePriceExclusive,
+		ProfitAmount:            detail.ProfitAmount,
 		PurchasePriceInclusive:  detail.PurchasePriceInclusive,
 		ProfitMargin:            detail.ProfitMargin,
 		DefaultSellingPrice:     detail.DefaultSellingPrice,
@@ -486,12 +496,18 @@ func SearchProductsRequestHandler(pool *pgxpool.Pool, authService *auth.Service)
 		results := make([]productSearchResponse, 0, len(items))
 		for _, item := range items {
 			results = append(results, productSearchResponse{
-				ID:           item.ID,
-				Name:         item.Name,
-				SKU:          item.SKU,
-				UnitName:     item.UnitName,
-				SellingPrice: item.SellingPrice,
-				ProductType:  item.ProductType,
+				ID:                     item.ID,
+				Name:                   item.Name,
+				SKU:                    item.SKU,
+				UnitName:               item.UnitName,
+				SellingPrice:           item.SellingPrice,
+				CurrentStock:           item.CurrentStock,
+				TaxType:                item.TaxType,
+				TaxRate:                item.TaxRate,
+				DefaultPurchasePrice:   item.DefaultPurchasePrice,
+				PurchasePriceExclusive: item.PurchasePriceExclusive,
+				PurchasePriceInclusive: item.PurchasePriceInclusive,
+				ProductType:            item.ProductType,
 			})
 		}
 
@@ -565,6 +581,7 @@ func ListProductsRequestHandler(pool *pgxpool.Pool, authService *auth.Service) g
 				TaxType:               item.TaxType,
 				TaxRate:               item.TaxRate,
 				DefaultPurchasePrice:  item.DefaultPurchasePrice,
+				ProfitAmount:          item.ProfitAmount,
 				DefaultSellingPrice:   item.DefaultSellingPrice,
 				ProfitMargin:          item.ProfitMargin,
 				CurrentStock:          item.CurrentStock,
