@@ -224,12 +224,24 @@ type updateProductResponse struct {
 }
 
 type productPriceHistoryResponse struct {
-	ID           string  `json:"id"`
-	BuyingPrice  float64 `json:"buyingPrice"`
-	SellingPrice float64 `json:"sellingPrice"`
-	ChangedBy    string  `json:"changedBy"`
-	Reason       *string `json:"reason"`
-	CreatedAt    string  `json:"createdAt"`
+	ID             string   `json:"id"`
+	ProductPriceID *string  `json:"productPriceId"`
+	Action         string   `json:"action"`
+	PriceType      string   `json:"priceType"`
+	MinQuantity    float64  `json:"minQuantity"`
+	OldPrice       *float64 `json:"oldPrice"`
+	NewPrice       float64  `json:"newPrice"`
+	LocationID     string   `json:"locationId"`
+	CustomerGroup  string   `json:"customerGroup"`
+	StartsAt       string   `json:"startsAt"`
+	EndsAt         string   `json:"endsAt"`
+	Active         bool     `json:"active"`
+	Priority       int      `json:"priority"`
+	BuyingPrice    float64  `json:"buyingPrice"`
+	SellingPrice   float64  `json:"sellingPrice"`
+	ChangedBy      string   `json:"changedBy"`
+	Reason         *string  `json:"reason"`
+	CreatedAt      string   `json:"createdAt"`
 }
 
 func mapProductDetailResponse(detail *repoproduct.ProductDetail) productDetailResponse {
@@ -960,13 +972,35 @@ func ListProductPriceHistoryRequestHandler(pool *pgxpool.Pool, authService *auth
 				value := item.Reason.String
 				reason = &value
 			}
+			var productPriceID *string
+			if item.ProductPriceID.Valid {
+				value := item.ProductPriceID.String
+				productPriceID = &value
+			}
+			var oldPrice *float64
+			if item.OldPrice.Valid {
+				value := item.OldPrice.Float64
+				oldPrice = &value
+			}
 			response = append(response, productPriceHistoryResponse{
-				ID:           item.ID,
-				BuyingPrice:  item.BuyingPrice,
-				SellingPrice: item.SellingPrice,
-				ChangedBy:    item.ChangedByName,
-				Reason:       reason,
-				CreatedAt:    item.CreatedAt,
+				ID:             item.ID,
+				ProductPriceID: productPriceID,
+				Action:         item.Action,
+				PriceType:      item.PriceType,
+				MinQuantity:    item.MinQuantity,
+				OldPrice:       oldPrice,
+				NewPrice:       item.NewPrice,
+				LocationID:     item.LocationID,
+				CustomerGroup:  item.CustomerGroup,
+				StartsAt:       item.StartsAt,
+				EndsAt:         item.EndsAt,
+				Active:         item.Active,
+				Priority:       item.Priority,
+				BuyingPrice:    0,
+				SellingPrice:   item.NewPrice,
+				ChangedBy:      item.ChangedByName,
+				Reason:         reason,
+				CreatedAt:      item.CreatedAt,
 			})
 		}
 

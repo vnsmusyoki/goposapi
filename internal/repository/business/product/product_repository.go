@@ -327,7 +327,7 @@ func CreateProductRepository(pool *pgxpool.Pool, req CreateProductInput) (*model
 		}
 	}
 
-	if err := insertProductPrices(ctx, tx, req.BusinessID, product.ID, productPricesWithRetailFallback(req.ProductPrices, req.DefaultSellingPrice)); err != nil {
+	if err := insertProductPrices(ctx, tx, req.BusinessID, product.ID, productPricesWithRetailFallback(req.ProductPrices, req.DefaultSellingPrice), nil, req.CreatedBy); err != nil {
 		return nil, err
 	}
 
@@ -788,19 +788,11 @@ func UpdateProductRepository(pool *pgxpool.Pool, productID string, req CreatePro
 		return nil, fmt.Errorf("load product for update: %w", err)
 	}
 
-	var existingBuyingPrice float64
-	var existingSellingPrice float64
-	if err := tx.QueryRow(ctx, `
-		SELECT
-			COALESCE(default_purchase_price, 0),
-			COALESCE(default_selling_price, 0)
-		FROM products
-		WHERE business_id = $1
-		  AND id::text = $2
-		  AND deleted_at IS NULL
-	`, req.BusinessID, productID).Scan(&existingBuyingPrice, &existingSellingPrice); err != nil {
-		return nil, fmt.Errorf("load product prices for update: %w", err)
+	existingPriceRules, err := loadExistingProductPriceRules(ctx, tx, req.BusinessID, productID)
+	if err != nil {
+		return nil, err
 	}
+	nextPriceRules := productPricesWithRetailFallback(req.ProductPrices, req.DefaultSellingPrice)
 
 	if req.SKU != "" {
 		var exists bool
@@ -905,6 +897,9 @@ func UpdateProductRepository(pool *pgxpool.Pool, productID string, req CreatePro
 	`, productID, actorID)
 	if err != nil {
 		return nil, fmt.Errorf("clear product variants: %w", err)
+	}
+	if err := recordRemovedProductPriceRules(ctx, tx, req.BusinessID, productID, existingPriceRules, nextPriceRules, actorID); err != nil {
+		return nil, err
 	}
 	_, err = tx.Exec(ctx, `
 		DELETE FROM product_prices
@@ -1042,32 +1037,8 @@ func UpdateProductRepository(pool *pgxpool.Pool, productID string, req CreatePro
 		}
 	}
 
-	if err := insertProductPrices(ctx, tx, req.BusinessID, productID, productPricesWithRetailFallback(req.ProductPrices, req.DefaultSellingPrice)); err != nil {
+	if err := insertProductPrices(ctx, tx, req.BusinessID, productID, nextPriceRules, existingPriceRules, actorID); err != nil {
 		return nil, err
-	}
-
-	newBuyingPrice := 0.0
-	if req.DefaultPurchasePrice != nil {
-		newBuyingPrice = *req.DefaultPurchasePrice
-	}
-	newSellingPrice := 0.0
-	if req.DefaultSellingPrice != nil {
-		newSellingPrice = *req.DefaultSellingPrice
-	}
-	if existingBuyingPrice != newBuyingPrice || existingSellingPrice != newSellingPrice {
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO product_price_history (
-				business_id,
-				product_id,
-				buying_price,
-				selling_price,
-				reason,
-				changed_by
-			)
-			VALUES ($1, $2::uuid, $3, $4, NULL, NULLIF($5, '')::uuid)
-		`, req.BusinessID, productID, newBuyingPrice, newSellingPrice, actorID); err != nil {
-			return nil, fmt.Errorf("insert product price history: %w", err)
-		}
 	}
 
 	var product models.Product
@@ -1115,7 +1086,68 @@ func productPricesWithRetailFallback(prices []CreateProductPriceInput, defaultSe
 	}}, prices...)
 }
 
-func insertProductPrices(ctx context.Context, tx pgx.Tx, businessID, productID string, prices []CreateProductPriceInput) error {
+type existingProductPriceRule struct {
+	ID            string
+	PriceType     string
+	MinQuantity   float64
+	Price         float64
+	LocationID    string
+	CustomerGroup string
+	StartsAt      string
+	EndsAt        string
+	Active        bool
+	Priority      int
+}
+
+func loadExistingProductPriceRules(ctx context.Context, tx pgx.Tx, businessID, productID string) (map[string]existingProductPriceRule, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT
+			id::text,
+			price_type,
+			min_quantity,
+			price,
+			COALESCE(location_id::text, ''),
+			COALESCE(customer_group, ''),
+			COALESCE(starts_at::text, ''),
+			COALESCE(ends_at::text, ''),
+			active,
+			priority
+		FROM product_prices
+		WHERE business_id = $1::uuid
+		  AND product_id = $2::uuid
+	`, businessID, productID)
+	if err != nil {
+		return nil, fmt.Errorf("load product price rules for update: %w", err)
+	}
+	defer rows.Close()
+
+	rules := make(map[string]existingProductPriceRule)
+	for rows.Next() {
+		var rule existingProductPriceRule
+		if err := rows.Scan(
+			&rule.ID,
+			&rule.PriceType,
+			&rule.MinQuantity,
+			&rule.Price,
+			&rule.LocationID,
+			&rule.CustomerGroup,
+			&rule.StartsAt,
+			&rule.EndsAt,
+			&rule.Active,
+			&rule.Priority,
+		); err != nil {
+			return nil, fmt.Errorf("scan product price rule for update: %w", err)
+		}
+		rules[productPriceRuleKey(rule.PriceType, rule.MinQuantity, rule.LocationID, rule.CustomerGroup)] = rule
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate product price rules for update: %w", err)
+	}
+
+	return rules, nil
+}
+
+func insertProductPrices(ctx context.Context, tx pgx.Tx, businessID, productID string, prices []CreateProductPriceInput, existingRules map[string]existingProductPriceRule, actorID string) error {
 	for _, price := range prices {
 		priceType := strings.TrimSpace(strings.ToLower(price.PriceType))
 		switch priceType {
@@ -1133,8 +1165,13 @@ func insertProductPrices(ctx context.Context, tx pgx.Tx, businessID, productID s
 		if price.Priority == 0 {
 			price.Priority = 100
 		}
+		price.LocationID = strings.TrimSpace(price.LocationID)
+		price.CustomerGroup = strings.TrimSpace(price.CustomerGroup)
+		price.StartsAt = strings.TrimSpace(price.StartsAt)
+		price.EndsAt = strings.TrimSpace(price.EndsAt)
 
-		if _, err := tx.Exec(ctx, `
+		var productPriceID string
+		if err := tx.QueryRow(ctx, `
 			INSERT INTO product_prices (
 				business_id,
 				product_id,
@@ -1161,24 +1198,168 @@ func insertProductPrices(ctx context.Context, tx pgx.Tx, businessID, productID s
 				$10,
 				$11
 			)
+			RETURNING id::text
 		`,
 			businessID,
 			productID,
-			strings.TrimSpace(price.LocationID),
-			strings.TrimSpace(price.CustomerGroup),
+			price.LocationID,
+			price.CustomerGroup,
 			priceType,
 			price.MinQuantity,
 			price.Price,
-			strings.TrimSpace(price.StartsAt),
-			strings.TrimSpace(price.EndsAt),
+			price.StartsAt,
+			price.EndsAt,
 			price.Active,
 			price.Priority,
-		); err != nil {
+		).Scan(&productPriceID); err != nil {
 			return fmt.Errorf("insert product prices: %w", err)
+		}
+
+		action := "created"
+		var oldPrice any
+		if existingRules != nil {
+			if existingRule, exists := existingRules[productPriceRuleKey(priceType, price.MinQuantity, price.LocationID, price.CustomerGroup)]; exists {
+				if !productPriceRuleChanged(existingRule, priceType, price) {
+					continue
+				}
+				action = productPriceChangeAction(existingRule.Active, price.Active)
+				oldPrice = existingRule.Price
+			}
+		}
+
+		if err := insertProductPriceRuleHistory(ctx, tx, businessID, productID, productPriceID, action, priceType, price, oldPrice, actorID); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func recordRemovedProductPriceRules(ctx context.Context, tx pgx.Tx, businessID, productID string, existingRules map[string]existingProductPriceRule, nextRules []CreateProductPriceInput, actorID string) error {
+	nextKeys := make(map[string]struct{}, len(nextRules))
+	for _, rule := range nextRules {
+		priceType := strings.TrimSpace(strings.ToLower(rule.PriceType))
+		minQuantity := rule.MinQuantity
+		if minQuantity <= 0 {
+			minQuantity = 1
+		}
+		nextKeys[productPriceRuleKey(priceType, minQuantity, strings.TrimSpace(rule.LocationID), strings.TrimSpace(rule.CustomerGroup))] = struct{}{}
+	}
+
+	for key, existingRule := range existingRules {
+		if _, exists := nextKeys[key]; exists {
+			continue
+		}
+		price := CreateProductPriceInput{
+			PriceType:     existingRule.PriceType,
+			MinQuantity:   existingRule.MinQuantity,
+			Price:         existingRule.Price,
+			LocationID:    existingRule.LocationID,
+			CustomerGroup: existingRule.CustomerGroup,
+			StartsAt:      existingRule.StartsAt,
+			EndsAt:        existingRule.EndsAt,
+			Active:        false,
+			Priority:      existingRule.Priority,
+		}
+		if err := insertProductPriceRuleHistory(ctx, tx, businessID, productID, existingRule.ID, "deleted", existingRule.PriceType, price, existingRule.Price, actorID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func insertProductPriceRuleHistory(ctx context.Context, tx pgx.Tx, businessID, productID, productPriceID, action, priceType string, price CreateProductPriceInput, oldPrice any, actorID string) error {
+	if _, err := tx.Exec(ctx, `
+			INSERT INTO product_price_rule_history (
+				business_id,
+				product_id,
+				product_price_id,
+				action,
+				price_type,
+				min_quantity,
+				old_price,
+				new_price,
+				location_id,
+				customer_group,
+				starts_at,
+				ends_at,
+				active,
+				priority,
+				reason,
+				changed_by
+			)
+			VALUES (
+				$1::uuid,
+				$2::uuid,
+				$3::uuid,
+				$4,
+				$5,
+				$6,
+				$7,
+				$8,
+				NULLIF($9, '')::uuid,
+				NULLIF($10, ''),
+				NULLIF($11, '')::timestamptz,
+				NULLIF($12, '')::timestamptz,
+				$13,
+				$14,
+				NULL,
+				NULLIF($15, '')::uuid
+			)
+		`,
+		businessID,
+		productID,
+		productPriceID,
+		action,
+		priceType,
+		price.MinQuantity,
+		oldPrice,
+		price.Price,
+		strings.TrimSpace(price.LocationID),
+		strings.TrimSpace(price.CustomerGroup),
+		strings.TrimSpace(price.StartsAt),
+		strings.TrimSpace(price.EndsAt),
+		price.Active,
+		price.Priority,
+		strings.TrimSpace(actorID),
+	); err != nil {
+		return fmt.Errorf("insert product price rule history: %w", err)
+	}
+
+	return nil
+}
+
+func productPriceRuleKey(priceType string, minQuantity float64, locationID, customerGroup string) string {
+	return fmt.Sprintf(
+		"%s|%.4f|%s|%s",
+		strings.TrimSpace(strings.ToLower(priceType)),
+		minQuantity,
+		strings.TrimSpace(strings.ToLower(locationID)),
+		strings.TrimSpace(strings.ToLower(customerGroup)),
+	)
+}
+
+func productPriceRuleChanged(existingRule existingProductPriceRule, priceType string, nextRule CreateProductPriceInput) bool {
+	return strings.TrimSpace(strings.ToLower(existingRule.PriceType)) != priceType ||
+		existingRule.MinQuantity != nextRule.MinQuantity ||
+		existingRule.Price != nextRule.Price ||
+		strings.TrimSpace(existingRule.LocationID) != strings.TrimSpace(nextRule.LocationID) ||
+		strings.TrimSpace(existingRule.CustomerGroup) != strings.TrimSpace(nextRule.CustomerGroup) ||
+		strings.TrimSpace(existingRule.StartsAt) != strings.TrimSpace(nextRule.StartsAt) ||
+		strings.TrimSpace(existingRule.EndsAt) != strings.TrimSpace(nextRule.EndsAt) ||
+		existingRule.Active != nextRule.Active ||
+		existingRule.Priority != nextRule.Priority
+}
+
+func productPriceChangeAction(wasActive, isActive bool) string {
+	if wasActive && !isActive {
+		return "deactivated"
+	}
+	if !wasActive && isActive {
+		return "reactivated"
+	}
+	return "updated"
 }
 
 func SearchProductsRepository(pool *pgxpool.Pool, businessID, query, productType string) ([]models.ProductSearchItem, error) {

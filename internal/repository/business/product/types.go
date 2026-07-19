@@ -201,14 +201,24 @@ type ProductSubUnitItem struct {
 }
 
 type ProductPriceHistoryItem struct {
-	ID            string
-	ProductID     string
-	BuyingPrice   float64
-	SellingPrice  float64
-	Reason        sql.NullString
-	ChangedByID   string
-	ChangedByName string
-	CreatedAt     string
+	ID             string
+	ProductID      string
+	ProductPriceID sql.NullString
+	Action         string
+	PriceType      string
+	MinQuantity    float64
+	OldPrice       sql.NullFloat64
+	NewPrice       float64
+	LocationID     string
+	CustomerGroup  string
+	StartsAt       string
+	EndsAt         string
+	Active         bool
+	Priority       int
+	Reason         sql.NullString
+	ChangedByID    string
+	ChangedByName  string
+	CreatedAt      string
 }
 
 type ListProductsFilters struct {

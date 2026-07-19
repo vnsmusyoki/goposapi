@@ -8,6 +8,7 @@ import (
 	"pos/internal/database"
 	adminhandler "pos/internal/handlers/admin"
 	brandhandler "pos/internal/handlers/business/brand"
+	cashregisterhandler "pos/internal/handlers/business/cashregister"
 	categoryhandler "pos/internal/handlers/business/category"
 	customerhandler "pos/internal/handlers/business/customer"
 	locationhandler "pos/internal/handlers/business/location"
@@ -141,6 +142,8 @@ func main() {
 	api.PATCH("/sales/orders/:id", saleshandler.UpdateSaleOrderRequestHandler(pool, authService))
 	api.PATCH("/sales/orders/:id/status", saleshandler.UpdateSalesOrderStatusRequestHandler(pool, authService))
 	api.DELETE("/sales/orders/:id", saleshandler.DeleteSalesOrderRequestHandler(pool, authService))
+	api.POST("/pos/registers/open", cashregisterhandler.OpenCashRegisterRequestHandler(pool, authService))
+	api.GET("/pos/readiness", cashregisterhandler.GetPosReadinessRequestHandler(pool, authService))
 	api.GET("/business/settings", settingshandler.GetBusinessSettingsRequestHandler(pool, authService))
 	api.PUT("/business/settings", settingshandler.UpdateBusinessSettingsRequestHandler(pool, authService))
 	api.GET("/business/settings/invoice", settingshandler.GetBusinessInvoiceSettingsRequestHandler(pool, authService))
