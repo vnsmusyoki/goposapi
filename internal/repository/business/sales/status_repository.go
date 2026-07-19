@@ -12,6 +12,7 @@ import (
 
 type salesOrderLifecycleSnapshot struct {
 	ID                string
+	ReferenceNumber   string
 	LocationID        string
 	Status            string
 	ReserveOrderItems bool
@@ -61,6 +62,7 @@ func UpdateSalesOrderStatusRepository(pool *pgxpool.Pool, req UpdateSalesOrderSt
 				LocationID: current.LocationID,
 				Status:     req.Status,
 				CreatedBy:  req.CreatedBy,
+				CreatedByName: req.CreatedByName,
 			}, req.SalesOrderID, "", req.CreatedBy); err != nil {
 				return nil, err
 			}
@@ -73,6 +75,20 @@ func UpdateSalesOrderStatusRepository(pool *pgxpool.Pool, req UpdateSalesOrderSt
 		if err := releaseSalesOrderReservationTx(ctx, tx, req.BusinessID, req.SalesOrderID); err != nil {
 			return nil, err
 		}
+	}
+
+	logAction := "status_changed"
+	if saleStatusConsumesInventory(req.Status) && strings.TrimSpace(current.SaleID) == "" {
+		logAction = "finalized"
+	}
+	if err := CreateSalesOrderLogTx(ctx, tx, SalesOrderLogInput{
+		BusinessID:   req.BusinessID,
+		SalesOrderID: req.SalesOrderID,
+		Action:       logAction,
+		ActionedBy:   req.CreatedBy,
+		Note:         buildSalesOrderActivityNote(logAction, current.ReferenceNumber, req.CreatedByName, current.Status, req.Status, req.ReserveOrderItems, logAction == "finalized"),
+	}); err != nil {
+		return nil, err
 	}
 
 	updated, err := GetSaleByIDRepositoryTx(ctx, tx, req.BusinessID, req.SalesOrderID)
@@ -92,6 +108,7 @@ func loadSalesOrderLifecycleSnapshotTx(ctx context.Context, tx saleInventoryTx, 
 	if err := tx.QueryRow(ctx, `
 		SELECT
 			id::text,
+			reference_number,
 			location_id::text,
 			status,
 			COALESCE(reserve_order_items, FALSE),
@@ -101,7 +118,7 @@ func loadSalesOrderLifecycleSnapshotTx(ctx context.Context, tx saleInventoryTx, 
 		  AND id = $2::uuid
 		  AND deleted_at IS NULL
 		LIMIT 1
-	`, businessID, salesOrderID).Scan(&snapshot.ID, &snapshot.LocationID, &snapshot.Status, &snapshot.ReserveOrderItems, &snapshot.SaleID); err != nil {
+	`, businessID, salesOrderID).Scan(&snapshot.ID, &snapshot.ReferenceNumber, &snapshot.LocationID, &snapshot.Status, &snapshot.ReserveOrderItems, &snapshot.SaleID); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrSaleNotFound
 		}

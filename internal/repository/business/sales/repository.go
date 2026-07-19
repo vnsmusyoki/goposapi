@@ -27,6 +27,7 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 	req.Notes = strings.TrimSpace(req.Notes)
 	req.StockAccountingMethod = strings.TrimSpace(req.StockAccountingMethod)
 	req.CreatedBy = strings.TrimSpace(req.CreatedBy)
+	req.CreatedByName = strings.TrimSpace(req.CreatedByName)
 
 	if req.BusinessID == "" || req.LocationID == "" || req.SaleDate == "" || len(req.Items) == 0 {
 		return nil, ErrInvalidSaleInput
@@ -46,6 +47,12 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
+
+	referenceNumber, err := generateSalesOrderReferenceNumberTx(ctx, tx, req.BusinessID)
+	if err != nil {
+		return nil, err
+	}
+	req.ReferenceNumber = referenceNumber
 
 	var saleID string
 	if err := tx.QueryRow(ctx, `
@@ -150,6 +157,16 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 		}
 	}
 
+	if err := CreateSalesOrderLogTx(ctx, tx, SalesOrderLogInput{
+		BusinessID:   req.BusinessID,
+		SalesOrderID: saleID,
+		Action:       "created",
+		ActionedBy:   req.CreatedBy,
+		Note:         buildSalesOrderActivityNote("created", req.ReferenceNumber, req.CreatedByName, "", "", req.ReserveOrderItems, false),
+	}); err != nil {
+		return nil, err
+	}
+
 	created, err := GetSaleByIDRepositoryTx(ctx, tx, req.BusinessID, saleID)
 	if err != nil {
 		return nil, err
@@ -160,6 +177,24 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 	}
 
 	return created, nil
+}
+
+func generateSalesOrderReferenceNumberTx(ctx context.Context, tx saleInventoryTx, businessID string) (string, error) {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, businessID); err != nil {
+		return "", fmt.Errorf("lock sales order sequence: %w", err)
+	}
+
+	var count int
+	if err := tx.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM sales_orders
+		WHERE business_id = $1::uuid
+		  AND deleted_at IS NULL
+	`, businessID).Scan(&count); err != nil {
+		return "", fmt.Errorf("count sales orders: %w", err)
+	}
+
+	return fmt.Sprintf("S0-%d", count+1), nil
 }
 
 func GetSaleByIDRepositoryTx(ctx context.Context, querier interface {

@@ -108,7 +108,6 @@ func selectSaleInventoryBatchesTx(ctx context.Context, tx saleInventoryTx, busin
 				0
 		  ) > 0
 		ORDER BY %s
-		FOR UPDATE
 	`, orderBy), businessID, productID, locationID)
 	if err != nil {
 		return nil, fmt.Errorf("load sale inventory batches: %w", err)

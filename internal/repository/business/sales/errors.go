@@ -6,4 +6,6 @@ var (
 	ErrBusinessNotResolved = errors.New("business not resolved")
 	ErrInvalidSaleInput     = errors.New("invalid sale input")
 	ErrSaleNotFound         = errors.New("sale not found")
+	ErrSalesOrderCannotDelete = errors.New("sales order cannot be deleted in its current status")
+	ErrSalesOrderCannotUpdate = errors.New("sales order cannot be updated in its current status")
 )
