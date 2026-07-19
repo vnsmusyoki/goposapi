@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"pos/internal/auth"
+	"pos/internal/models"
 	repoproduct "pos/internal/repository/business/product"
 )
 
@@ -50,6 +51,7 @@ type createProductPayload struct {
 	Images                  []createProductImagePayload     `json:"images"`
 	ComboItems              []createProductComboItemPayload `json:"combo_items"`
 	Variants                []createProductVariantPayload   `json:"variants"`
+	ProductPrices           []createProductPricePayload     `json:"product_prices"`
 }
 
 type createProductImagePayload struct {
@@ -87,6 +89,18 @@ type createProductVariantPayload struct {
 	SupplierCode       *string  `json:"supplier_code"`
 }
 
+type createProductPricePayload struct {
+	PriceType     *string  `json:"price_type"`
+	MinQuantity   *float64 `json:"min_quantity"`
+	Price         *float64 `json:"price"`
+	LocationID    *string  `json:"location_id"`
+	CustomerGroup *string  `json:"customer_group"`
+	StartsAt      *string  `json:"starts_at"`
+	EndsAt        *string  `json:"ends_at"`
+	Active        *bool    `json:"active"`
+	Priority      *int     `json:"priority"`
+}
+
 type createProductResponse struct {
 	ID          string  `json:"id"`
 	Name        string  `json:"name"`
@@ -111,39 +125,40 @@ type productSearchResponse struct {
 }
 
 type productListItemResponse struct {
-	ID                    string   `json:"id"`
-	Name                  string   `json:"name"`
-	SKU                   *string  `json:"sku"`
-	ImageURL              string   `json:"imageUrl"`
-	Barcode               string   `json:"barcode"`
-	ProductType           string   `json:"productType"`
-	UnitID                string   `json:"unitId"`
-	UnitName              string   `json:"unitName"`
-	BrandID               string   `json:"brandId"`
-	BrandName             string   `json:"brandName"`
-	CategoryID            string   `json:"categoryId"`
-	CategoryName          string   `json:"categoryName"`
-	SubCategoryID         string   `json:"subCategoryId"`
-	SubCategoryName       string   `json:"subCategoryName"`
-	LocationIDs           []string `json:"locationIds"`
-	LocationNames         []string `json:"locationNames"`
-	ManageStock           bool     `json:"manageStock"`
-	AlertQuantity         int      `json:"alertQuantity"`
-	IsForSelling          bool     `json:"isForSelling"`
-	TaxType               string   `json:"taxType"`
-	TaxRate               float64  `json:"taxRate"`
-	DefaultPurchasePrice  float64  `json:"defaultPurchasePrice"`
-	ProfitAmount          float64  `json:"profitAmount"`
-	DefaultSellingPrice   float64  `json:"defaultSellingPrice"`
-	ProfitMargin          float64  `json:"profitMargin"`
-	CurrentStock          int      `json:"currentStock"`
-	CurrentStockValue     float64  `json:"currentStockValue"`
-	TotalUnitsSold        int      `json:"totalUnitsSold"`
-	TotalUnitsTransferred int      `json:"totalUnitsTransferred"`
-	TotalUnitsAdjusted    int      `json:"totalUnitsAdjusted"`
-	CreatedAt             string   `json:"createdAt"`
-	UpdatedAt             string   `json:"updatedAt"`
-	Status                string   `json:"status"`
+	ID                    string                 `json:"id"`
+	Name                  string                 `json:"name"`
+	SKU                   *string                `json:"sku"`
+	ImageURL              string                 `json:"imageUrl"`
+	Barcode               string                 `json:"barcode"`
+	ProductType           string                 `json:"productType"`
+	UnitID                string                 `json:"unitId"`
+	UnitName              string                 `json:"unitName"`
+	BrandID               string                 `json:"brandId"`
+	BrandName             string                 `json:"brandName"`
+	CategoryID            string                 `json:"categoryId"`
+	CategoryName          string                 `json:"categoryName"`
+	SubCategoryID         string                 `json:"subCategoryId"`
+	SubCategoryName       string                 `json:"subCategoryName"`
+	LocationIDs           []string               `json:"locationIds"`
+	LocationNames         []string               `json:"locationNames"`
+	ManageStock           bool                   `json:"manageStock"`
+	AlertQuantity         int                    `json:"alertQuantity"`
+	IsForSelling          bool                   `json:"isForSelling"`
+	TaxType               string                 `json:"taxType"`
+	TaxRate               float64                `json:"taxRate"`
+	DefaultPurchasePrice  float64                `json:"defaultPurchasePrice"`
+	ProfitAmount          float64                `json:"profitAmount"`
+	DefaultSellingPrice   float64                `json:"defaultSellingPrice"`
+	ProfitMargin          float64                `json:"profitMargin"`
+	CurrentStock          int                    `json:"currentStock"`
+	CurrentStockValue     float64                `json:"currentStockValue"`
+	TotalUnitsSold        int                    `json:"totalUnitsSold"`
+	TotalUnitsTransferred int                    `json:"totalUnitsTransferred"`
+	TotalUnitsAdjusted    int                    `json:"totalUnitsAdjusted"`
+	CreatedAt             string                 `json:"createdAt"`
+	UpdatedAt             string                 `json:"updatedAt"`
+	Status                string                 `json:"status"`
+	ProductPrices         []productPriceResponse `json:"productPrices"`
 }
 
 type listProductsResponse struct {
@@ -184,6 +199,20 @@ type productDetailResponse struct {
 	Images                  []repoproduct.ProductImageItem     `json:"images"`
 	ComboItems              []repoproduct.ProductComboItemItem `json:"comboItems"`
 	Variants                []repoproduct.ProductVariantItem   `json:"variants"`
+	ProductPrices           []productPriceResponse             `json:"productPrices"`
+}
+
+type productPriceResponse struct {
+	ID            string  `json:"id"`
+	PriceType     string  `json:"priceType"`
+	MinQuantity   float64 `json:"minQuantity"`
+	Price         float64 `json:"price"`
+	LocationID    string  `json:"locationId"`
+	CustomerGroup string  `json:"customerGroup"`
+	StartsAt      string  `json:"startsAt"`
+	EndsAt        string  `json:"endsAt"`
+	Active        bool    `json:"active"`
+	Priority      int     `json:"priority"`
 }
 
 type updateProductResponse struct {
@@ -243,6 +272,7 @@ func mapProductDetailResponse(detail *repoproduct.ProductDetail) productDetailRe
 			CreatedAt:             detail.CreatedAt,
 			UpdatedAt:             detail.UpdatedAt,
 			Status:                detail.Status,
+			ProductPrices:         mapRepositoryProductPrices(detail.ProductPrices),
 		},
 		UnitID:                  detail.UnitID,
 		SubUnitIDs:              detail.SubUnitIDs,
@@ -275,6 +305,7 @@ func mapProductDetailResponse(detail *repoproduct.ProductDetail) productDetailRe
 		Images:                  detail.Images,
 		ComboItems:              detail.ComboItems,
 		Variants:                detail.Variants,
+		ProductPrices:           mapRepositoryProductPrices(detail.ProductPrices),
 	}
 
 	if response.CurrencyCode == "" {
@@ -285,6 +316,44 @@ func mapProductDetailResponse(detail *repoproduct.ProductDetail) productDetailRe
 	}
 	if response.CurrencyPrecision < 0 {
 		response.CurrencyPrecision = 2
+	}
+	return response
+}
+
+func mapRepositoryProductPrices(items []repoproduct.ProductPriceItem) []productPriceResponse {
+	response := make([]productPriceResponse, 0, len(items))
+	for _, item := range items {
+		response = append(response, productPriceResponse{
+			ID:            item.ID,
+			PriceType:     item.PriceType,
+			MinQuantity:   item.MinQuantity,
+			Price:         item.Price,
+			LocationID:    item.LocationID,
+			CustomerGroup: item.CustomerGroup,
+			StartsAt:      item.StartsAt,
+			EndsAt:        item.EndsAt,
+			Active:        item.Active,
+			Priority:      item.Priority,
+		})
+	}
+	return response
+}
+
+func mapModelProductPrices(items []models.ProductPriceItem) []productPriceResponse {
+	response := make([]productPriceResponse, 0, len(items))
+	for _, item := range items {
+		response = append(response, productPriceResponse{
+			ID:            item.ID,
+			PriceType:     item.PriceType,
+			MinQuantity:   item.MinQuantity,
+			Price:         item.Price,
+			LocationID:    item.LocationID,
+			CustomerGroup: item.CustomerGroup,
+			StartsAt:      item.StartsAt,
+			EndsAt:        item.EndsAt,
+			Active:        item.Active,
+			Priority:      item.Priority,
+		})
 	}
 	return response
 }
@@ -414,6 +483,20 @@ func CreateProductRequestHandler(pool *pgxpool.Pool, authService *auth.Service) 
 				ReorderLevel:       variant.ReorderLevel,
 				ExpiryDate:         derefString(variant.ExpiryDate),
 				SupplierCode:       derefString(variant.SupplierCode),
+			})
+		}
+
+		for _, price := range payload.ProductPrices {
+			req.ProductPrices = append(req.ProductPrices, repoproduct.CreateProductPriceInput{
+				PriceType:     strings.ToLower(derefString(price.PriceType)),
+				MinQuantity:   floatValue(price.MinQuantity, 1),
+				Price:         floatValue(price.Price, 0),
+				LocationID:    derefString(price.LocationID),
+				CustomerGroup: derefString(price.CustomerGroup),
+				StartsAt:      derefString(price.StartsAt),
+				EndsAt:        derefString(price.EndsAt),
+				Active:        boolValue(price.Active, true),
+				Priority:      intValue(price.Priority, 100),
 			})
 		}
 
@@ -592,6 +675,7 @@ func ListProductsRequestHandler(pool *pgxpool.Pool, authService *auth.Service) g
 				CreatedAt:             item.CreatedAt,
 				UpdatedAt:             item.UpdatedAt,
 				Status:                item.Status,
+				ProductPrices:         mapModelProductPrices(item.ProductPrices),
 			})
 		}
 
@@ -780,6 +864,20 @@ func UpdateProductRequestHandler(pool *pgxpool.Pool, authService *auth.Service) 
 			})
 		}
 
+		for _, price := range payload.ProductPrices {
+			req.ProductPrices = append(req.ProductPrices, repoproduct.CreateProductPriceInput{
+				PriceType:     strings.ToLower(derefString(price.PriceType)),
+				MinQuantity:   floatValue(price.MinQuantity, 1),
+				Price:         floatValue(price.Price, 0),
+				LocationID:    derefString(price.LocationID),
+				CustomerGroup: derefString(price.CustomerGroup),
+				StartsAt:      derefString(price.StartsAt),
+				EndsAt:        derefString(price.EndsAt),
+				Active:        boolValue(price.Active, true),
+				Priority:      intValue(price.Priority, 100),
+			})
+		}
+
 		product, err := repoproduct.UpdateProductRepository(pool, productID, req, user.ID)
 		if err != nil {
 			switch {
@@ -873,7 +971,7 @@ func ListProductPriceHistoryRequestHandler(pool *pgxpool.Pool, authService *auth
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"items": response,
+			"items":   response,
 			"message": "Price history loaded successfully",
 		})
 	}

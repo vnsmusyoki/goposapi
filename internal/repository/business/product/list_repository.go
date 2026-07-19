@@ -201,5 +201,73 @@ func ListProductsRepository(pool *pgxpool.Pool, businessID string, filters ListP
 		return nil, fmt.Errorf("iterate products: %w", err)
 	}
 
+	if err := loadProductListPrices(ctx, pool, businessID, items); err != nil {
+		return nil, err
+	}
+
 	return items, nil
+}
+
+func loadProductListPrices(ctx context.Context, pool *pgxpool.Pool, businessID string, items []models.ProductListItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	productIDs := make([]string, 0, len(items))
+	productIndex := make(map[string]int, len(items))
+	for idx, item := range items {
+		productIDs = append(productIDs, item.ID)
+		productIndex[item.ID] = idx
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT
+			id::text,
+			product_id::text,
+			price_type,
+			min_quantity,
+			price,
+			COALESCE(location_id::text, ''),
+			COALESCE(customer_group, ''),
+			COALESCE(starts_at::text, ''),
+			COALESCE(ends_at::text, ''),
+			active,
+			priority
+		FROM product_prices
+		WHERE business_id = $1::uuid
+		  AND product_id::text = ANY($2)
+		ORDER BY product_id, priority ASC, min_quantity ASC, created_at ASC
+	`, businessID, productIDs)
+	if err != nil {
+		return fmt.Errorf("list product prices: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var productID string
+		var price models.ProductPriceItem
+		if err := rows.Scan(
+			&price.ID,
+			&productID,
+			&price.PriceType,
+			&price.MinQuantity,
+			&price.Price,
+			&price.LocationID,
+			&price.CustomerGroup,
+			&price.StartsAt,
+			&price.EndsAt,
+			&price.Active,
+			&price.Priority,
+		); err != nil {
+			return fmt.Errorf("scan product price: %w", err)
+		}
+		if idx, ok := productIndex[productID]; ok {
+			items[idx].ProductPrices = append(items[idx].ProductPrices, price)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate product prices: %w", err)
+	}
+
+	return nil
 }

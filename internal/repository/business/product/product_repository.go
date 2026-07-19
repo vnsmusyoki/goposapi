@@ -327,6 +327,10 @@ func CreateProductRepository(pool *pgxpool.Pool, req CreateProductInput) (*model
 		}
 	}
 
+	if err := insertProductPrices(ctx, tx, req.BusinessID, product.ID, productPricesWithRetailFallback(req.ProductPrices, req.DefaultSellingPrice)); err != nil {
+		return nil, err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit product tx: %w", err)
 	}
@@ -655,6 +659,49 @@ func GetProductByIDRepository(pool *pgxpool.Pool, businessID, productID string) 
 		return nil, fmt.Errorf("iterate product variants: %w", err)
 	}
 
+	priceRows, err := pool.Query(ctx, `
+		SELECT
+			id::text,
+			price_type,
+			min_quantity,
+			price,
+			COALESCE(location_id::text, ''),
+			COALESCE(customer_group, ''),
+			COALESCE(starts_at::text, ''),
+			COALESCE(ends_at::text, ''),
+			active,
+			priority
+		FROM product_prices
+		WHERE business_id = $1::uuid
+		  AND product_id = $2::uuid
+		ORDER BY priority ASC, min_quantity ASC, created_at ASC
+	`, businessID, productID)
+	if err != nil {
+		return nil, fmt.Errorf("list product prices: %w", err)
+	}
+	defer priceRows.Close()
+	for priceRows.Next() {
+		var item ProductPriceItem
+		if err := priceRows.Scan(
+			&item.ID,
+			&item.PriceType,
+			&item.MinQuantity,
+			&item.Price,
+			&item.LocationID,
+			&item.CustomerGroup,
+			&item.StartsAt,
+			&item.EndsAt,
+			&item.Active,
+			&item.Priority,
+		); err != nil {
+			return nil, fmt.Errorf("scan product price: %w", err)
+		}
+		detail.ProductPrices = append(detail.ProductPrices, item)
+	}
+	if err := priceRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate product prices: %w", err)
+	}
+
 	return &detail, nil
 }
 
@@ -859,6 +906,14 @@ func UpdateProductRepository(pool *pgxpool.Pool, productID string, req CreatePro
 	if err != nil {
 		return nil, fmt.Errorf("clear product variants: %w", err)
 	}
+	_, err = tx.Exec(ctx, `
+		DELETE FROM product_prices
+		WHERE business_id = $1
+		  AND product_id = $2::uuid
+	`, req.BusinessID, productID)
+	if err != nil {
+		return nil, fmt.Errorf("clear product prices: %w", err)
+	}
 
 	if len(req.SubUnitIDs) > 0 {
 		for _, unitID := range req.SubUnitIDs {
@@ -987,6 +1042,10 @@ func UpdateProductRepository(pool *pgxpool.Pool, productID string, req CreatePro
 		}
 	}
 
+	if err := insertProductPrices(ctx, tx, req.BusinessID, productID, productPricesWithRetailFallback(req.ProductPrices, req.DefaultSellingPrice)); err != nil {
+		return nil, err
+	}
+
 	newBuyingPrice := 0.0
 	if req.DefaultPurchasePrice != nil {
 		newBuyingPrice = *req.DefaultPurchasePrice
@@ -1029,6 +1088,97 @@ func UpdateProductRepository(pool *pgxpool.Pool, productID string, req CreatePro
 	}
 
 	return &product, nil
+}
+
+func productPricesWithRetailFallback(prices []CreateProductPriceInput, defaultSellingPrice *float64) []CreateProductPriceInput {
+	if defaultSellingPrice == nil {
+		return prices
+	}
+
+	hasRetail := false
+	for _, price := range prices {
+		if strings.EqualFold(strings.TrimSpace(price.PriceType), "retail") {
+			hasRetail = true
+			break
+		}
+	}
+	if hasRetail {
+		return prices
+	}
+
+	return append([]CreateProductPriceInput{{
+		PriceType:   "retail",
+		MinQuantity: 1,
+		Price:       *defaultSellingPrice,
+		Active:      true,
+		Priority:    100,
+	}}, prices...)
+}
+
+func insertProductPrices(ctx context.Context, tx pgx.Tx, businessID, productID string, prices []CreateProductPriceInput) error {
+	for _, price := range prices {
+		priceType := strings.TrimSpace(strings.ToLower(price.PriceType))
+		switch priceType {
+		case "retail", "wholesale", "tier", "location", "promotion", "customer_group":
+		default:
+			return ErrInvalidProductInput
+		}
+
+		if price.MinQuantity <= 0 {
+			price.MinQuantity = 1
+		}
+		if price.Price < 0 {
+			return ErrInvalidProductInput
+		}
+		if price.Priority == 0 {
+			price.Priority = 100
+		}
+
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO product_prices (
+				business_id,
+				product_id,
+				location_id,
+				customer_group,
+				price_type,
+				min_quantity,
+				price,
+				starts_at,
+				ends_at,
+				active,
+				priority
+			)
+			VALUES (
+				$1::uuid,
+				$2::uuid,
+				NULLIF($3, '')::uuid,
+				NULLIF($4, ''),
+				$5,
+				$6,
+				$7,
+				NULLIF($8, '')::timestamptz,
+				NULLIF($9, '')::timestamptz,
+				$10,
+				$11
+			)
+		`,
+			businessID,
+			productID,
+			strings.TrimSpace(price.LocationID),
+			strings.TrimSpace(price.CustomerGroup),
+			priceType,
+			price.MinQuantity,
+			price.Price,
+			strings.TrimSpace(price.StartsAt),
+			strings.TrimSpace(price.EndsAt),
+			price.Active,
+			price.Priority,
+		); err != nil {
+			return fmt.Errorf("insert product prices: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func SearchProductsRepository(pool *pgxpool.Pool, businessID, query, productType string) ([]models.ProductSearchItem, error) {

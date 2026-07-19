@@ -11,54 +11,68 @@ type Product struct {
 }
 
 type ProductSearchItem struct {
-	ID                    string  `json:"id" db:"id"`
-	Name                  string  `json:"name" db:"name"`
-	SKU                   *string `json:"sku" db:"sku"`
-	UnitName              string  `json:"unitName" db:"unit_name"`
-	SellingPrice          float64 `json:"sellingPrice" db:"selling_price"`
-	CurrentStock          int     `json:"currentStock" db:"current_stock"`
-	TaxType               string  `json:"taxType" db:"tax_type"`
-	TaxRate               float64 `json:"taxRate" db:"tax_rate"`
-	DefaultPurchasePrice  float64 `json:"defaultPurchasePrice" db:"default_purchase_price"`
+	ID                     string  `json:"id" db:"id"`
+	Name                   string  `json:"name" db:"name"`
+	SKU                    *string `json:"sku" db:"sku"`
+	UnitName               string  `json:"unitName" db:"unit_name"`
+	SellingPrice           float64 `json:"sellingPrice" db:"selling_price"`
+	CurrentStock           int     `json:"currentStock" db:"current_stock"`
+	TaxType                string  `json:"taxType" db:"tax_type"`
+	TaxRate                float64 `json:"taxRate" db:"tax_rate"`
+	DefaultPurchasePrice   float64 `json:"defaultPurchasePrice" db:"default_purchase_price"`
 	PurchasePriceExclusive float64 `json:"purchasePriceExclusive" db:"purchase_price_exclusive"`
 	PurchasePriceInclusive float64 `json:"purchasePriceInclusive" db:"purchase_price_inclusive"`
-	ProductType           string  `json:"productType" db:"product_type"`
+	ProductType            string  `json:"productType" db:"product_type"`
 }
 
 type ProductListItem struct {
-	ID                    string   `json:"id" db:"id"`
-	Name                  string   `json:"name" db:"name"`
-	SKU                   *string  `json:"sku" db:"sku"`
-	ImageURL              string   `json:"imageUrl" db:"image_url"`
-	Barcode               string   `json:"barcode" db:"barcode"`
-	ProductType           string   `json:"productType" db:"product_type"`
-	UnitID                string   `json:"unitId" db:"unit_id"`
-	UnitName              string   `json:"unitName" db:"unit_name"`
-	BrandID               string   `json:"brandId" db:"brand_id"`
-	BrandName             string   `json:"brandName" db:"brand_name"`
-	CategoryID            string   `json:"categoryId" db:"category_id"`
-	CategoryName          string   `json:"categoryName" db:"category_name"`
-	SubCategoryID         string   `json:"subCategoryId" db:"sub_category_id"`
-	SubCategoryName       string   `json:"subCategoryName" db:"sub_category_name"`
-	LocationIDs           []string `json:"locationIds" db:"location_ids"`
-	LocationNames         []string `json:"locationNames" db:"location_names"`
-	ManageStock           bool     `json:"manageStock" db:"manage_stock"`
-	AlertQuantity         int      `json:"alertQuantity" db:"alert_quantity"`
-	IsForSelling          bool     `json:"isForSelling" db:"is_for_selling"`
-	TaxType               string   `json:"taxType" db:"tax_type"`
-	TaxRate               float64  `json:"taxRate" db:"tax_rate"`
-	DefaultPurchasePrice  float64  `json:"defaultPurchasePrice" db:"default_purchase_price"`
-	ProfitAmount          float64  `json:"profitAmount" db:"profit_amount"`
-	DefaultSellingPrice   float64  `json:"defaultSellingPrice" db:"default_selling_price"`
-	ProfitMargin          float64  `json:"profitMargin" db:"profit_margin"`
-	CurrentStock          int      `json:"currentStock" db:"current_stock"`
-	CurrentStockValue     float64  `json:"currentStockValue" db:"current_stock_value"`
-	TotalUnitsSold        int      `json:"totalUnitsSold" db:"total_units_sold"`
-	TotalUnitsTransferred int      `json:"totalUnitsTransferred" db:"total_units_transferred"`
-	TotalUnitsAdjusted    int      `json:"totalUnitsAdjusted" db:"total_units_adjusted"`
-	CreatedAt             string   `json:"createdAt" db:"created_at"`
-	UpdatedAt             string   `json:"updatedAt" db:"updated_at"`
-	Status                string   `json:"status" db:"status"`
+	ID                    string             `json:"id" db:"id"`
+	Name                  string             `json:"name" db:"name"`
+	SKU                   *string            `json:"sku" db:"sku"`
+	ImageURL              string             `json:"imageUrl" db:"image_url"`
+	Barcode               string             `json:"barcode" db:"barcode"`
+	ProductType           string             `json:"productType" db:"product_type"`
+	UnitID                string             `json:"unitId" db:"unit_id"`
+	UnitName              string             `json:"unitName" db:"unit_name"`
+	BrandID               string             `json:"brandId" db:"brand_id"`
+	BrandName             string             `json:"brandName" db:"brand_name"`
+	CategoryID            string             `json:"categoryId" db:"category_id"`
+	CategoryName          string             `json:"categoryName" db:"category_name"`
+	SubCategoryID         string             `json:"subCategoryId" db:"sub_category_id"`
+	SubCategoryName       string             `json:"subCategoryName" db:"sub_category_name"`
+	LocationIDs           []string           `json:"locationIds" db:"location_ids"`
+	LocationNames         []string           `json:"locationNames" db:"location_names"`
+	ManageStock           bool               `json:"manageStock" db:"manage_stock"`
+	AlertQuantity         int                `json:"alertQuantity" db:"alert_quantity"`
+	IsForSelling          bool               `json:"isForSelling" db:"is_for_selling"`
+	TaxType               string             `json:"taxType" db:"tax_type"`
+	TaxRate               float64            `json:"taxRate" db:"tax_rate"`
+	DefaultPurchasePrice  float64            `json:"defaultPurchasePrice" db:"default_purchase_price"`
+	ProfitAmount          float64            `json:"profitAmount" db:"profit_amount"`
+	DefaultSellingPrice   float64            `json:"defaultSellingPrice" db:"default_selling_price"`
+	ProfitMargin          float64            `json:"profitMargin" db:"profit_margin"`
+	CurrentStock          int                `json:"currentStock" db:"current_stock"`
+	CurrentStockValue     float64            `json:"currentStockValue" db:"current_stock_value"`
+	TotalUnitsSold        int                `json:"totalUnitsSold" db:"total_units_sold"`
+	TotalUnitsTransferred int                `json:"totalUnitsTransferred" db:"total_units_transferred"`
+	TotalUnitsAdjusted    int                `json:"totalUnitsAdjusted" db:"total_units_adjusted"`
+	CreatedAt             string             `json:"createdAt" db:"created_at"`
+	UpdatedAt             string             `json:"updatedAt" db:"updated_at"`
+	Status                string             `json:"status" db:"status"`
+	ProductPrices         []ProductPriceItem `json:"productPrices"`
+}
+
+type ProductPriceItem struct {
+	ID            string  `json:"id"`
+	PriceType     string  `json:"priceType"`
+	MinQuantity   float64 `json:"minQuantity"`
+	Price         float64 `json:"price"`
+	LocationID    string  `json:"locationId"`
+	CustomerGroup string  `json:"customerGroup"`
+	StartsAt      string  `json:"startsAt"`
+	EndsAt        string  `json:"endsAt"`
+	Active        bool    `json:"active"`
+	Priority      int     `json:"priority"`
 }
 
 type ProductImage struct {

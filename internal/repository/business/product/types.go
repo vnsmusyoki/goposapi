@@ -37,6 +37,18 @@ type CreateProductVariantInput struct {
 	SupplierCode       string
 }
 
+type CreateProductPriceInput struct {
+	PriceType     string
+	MinQuantity   float64
+	Price         float64
+	LocationID    string
+	CustomerGroup string
+	StartsAt      string
+	EndsAt        string
+	Active        bool
+	Priority      int
+}
+
 type CreateProductInput struct {
 	BusinessID              string
 	Name                    string
@@ -74,6 +86,7 @@ type CreateProductInput struct {
 	Images                  []CreateProductImageInput
 	ComboItems              []CreateProductComboItemInput
 	Variants                []CreateProductVariantInput
+	ProductPrices           []CreateProductPriceInput
 }
 
 type ProductImageItem struct {
@@ -112,6 +125,19 @@ type ProductVariantItem struct {
 	ReorderLevel       *int
 	ExpiryDate         string
 	SupplierCode       string
+}
+
+type ProductPriceItem struct {
+	ID            string
+	PriceType     string
+	MinQuantity   float64
+	Price         float64
+	LocationID    string
+	CustomerGroup string
+	StartsAt      string
+	EndsAt        string
+	Active        bool
+	Priority      int
 }
 
 type ProductDetail struct {
@@ -166,6 +192,7 @@ type ProductDetail struct {
 	Images                  []ProductImageItem
 	ComboItems              []ProductComboItemItem
 	Variants                []ProductVariantItem
+	ProductPrices           []ProductPriceItem
 }
 
 type ProductSubUnitItem struct {
