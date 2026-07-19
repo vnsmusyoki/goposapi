@@ -36,13 +36,13 @@ type SalesOrderActor struct {
 }
 
 type SalesOrderLog struct {
-	ID            string           `json:"id"`
-	BusinessID    string           `json:"businessId"`
-	SalesOrderID  string           `json:"salesOrderId"`
-	Action        string           `json:"action"`
-	ActionedBy    *SalesOrderActor  `json:"actionedBy,omitempty"`
-	Note          string           `json:"note"`
-	ActionDate    string           `json:"actionDate"`
+	ID           string           `json:"id"`
+	BusinessID   string           `json:"businessId"`
+	SalesOrderID string           `json:"salesOrderId"`
+	Action       string           `json:"action"`
+	ActionedBy   *SalesOrderActor `json:"actionedBy,omitempty"`
+	Note         string           `json:"note"`
+	ActionDate   string           `json:"actionDate"`
 }
 
 type SalesOrderListItem struct {
@@ -91,11 +91,19 @@ type SalesOrderLocationDetails struct {
 
 type SalesOrderDetail struct {
 	SaleOrder  Sale                      `json:"saleOrder"`
-	Customer   SalesOrderCustomerDetails  `json:"customer"`
-	Business   SalesOrderBusinessDetails  `json:"business"`
-	Location   SalesOrderLocationDetails  `json:"location"`
+	Customer   SalesOrderCustomerDetails `json:"customer"`
+	Business   SalesOrderBusinessDetails `json:"business"`
+	Location   SalesOrderLocationDetails `json:"location"`
 	Items      []SaleItem                `json:"items"`
 	Activities []SalesOrderLog           `json:"activities"`
+}
+
+type SalesOrderStatusDefinition struct {
+	Code                  string `json:"code"`
+	Name                  string `json:"name"`
+	WhatHappens           string `json:"whatHappens"`
+	RequiresFurtherAction bool   `json:"requiresFurtherAction"`
+	SortOrder             int    `json:"sortOrder"`
 }
 
 type SalesOrderFilters struct {
@@ -118,26 +126,26 @@ type UpdateSalesOrderStatusInput struct {
 }
 
 type UpdateSaleOrderInput struct {
-	BusinessID                string
-	SalesOrderID              string
-	CustomerID                string
-	LocationID                string
-	SaleDate                  string
-	CustomerName              string
-	CustomerPhone             string
-	CustomerEmail             string
-	Notes                     string
-	Status                    string
-	ReserveOrderItems         bool
-	UpdatedBy                 string
-	UpdatedByName             string
-	Items                     []CreateSaleItemInput
-	Subtotal                  float64
-	TotalDiscount             float64
-	TotalTax                  float64
-	GrandTotal                float64
-	ItemsCount                int
-	TotalQuantity             float64
+	BusinessID        string
+	SalesOrderID      string
+	CustomerID        string
+	LocationID        string
+	SaleDate          string
+	CustomerName      string
+	CustomerPhone     string
+	CustomerEmail     string
+	Notes             string
+	Status            string
+	ReserveOrderItems bool
+	UpdatedBy         string
+	UpdatedByName     string
+	Items             []CreateSaleItemInput
+	Subtotal          float64
+	TotalDiscount     float64
+	TotalTax          float64
+	GrandTotal        float64
+	ItemsCount        int
+	TotalQuantity     float64
 }
 
 type SaleItem struct {

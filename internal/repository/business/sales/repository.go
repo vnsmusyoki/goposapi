@@ -48,6 +48,10 @@ func CreateSaleOrderRepository(pool *pgxpool.Pool, req CreateSaleOrderInput) (*S
 		_ = tx.Rollback(ctx)
 	}()
 
+	if _, err := getSalesOrderStatusByCode(ctx, tx, req.Status); err != nil {
+		return nil, err
+	}
+
 	referenceNumber, err := generateSalesOrderReferenceNumberTx(ctx, tx, req.BusinessID)
 	if err != nil {
 		return nil, err
@@ -194,7 +198,7 @@ func generateSalesOrderReferenceNumberTx(ctx context.Context, tx saleInventoryTx
 		return "", fmt.Errorf("count sales orders: %w", err)
 	}
 
-	return fmt.Sprintf("S0-%d", count+1), nil
+	return fmt.Sprintf("SO-%05d", count+1), nil
 }
 
 func GetSaleByIDRepositoryTx(ctx context.Context, querier interface {

@@ -9,12 +9,12 @@ import (
 	adminhandler "pos/internal/handlers/admin"
 	brandhandler "pos/internal/handlers/business/brand"
 	categoryhandler "pos/internal/handlers/business/category"
+	customerhandler "pos/internal/handlers/business/customer"
 	locationhandler "pos/internal/handlers/business/location"
 	openingstockhandler "pos/internal/handlers/business/openingstock"
-	customerhandler "pos/internal/handlers/business/customer"
 	producthandler "pos/internal/handlers/business/product"
-	saleshandler "pos/internal/handlers/business/sales"
 	purchaseorderhandler "pos/internal/handlers/business/purchaseorder"
+	saleshandler "pos/internal/handlers/business/sales"
 	settingshandler "pos/internal/handlers/business/settings"
 	subcategoryhandler "pos/internal/handlers/business/subcategory"
 	supplierhandler "pos/internal/handlers/business/supplier"
@@ -134,6 +134,8 @@ func main() {
 	api.PUT("/purchases/orders/:id", purchaseorderhandler.UpdatePurchaseOrderRequestHandler(pool, authService))
 	api.DELETE("/purchases/orders/:id", purchaseorderhandler.DeletePurchaseOrderRequestHandler(pool, authService))
 	api.POST("/sales/orders", saleshandler.CreateSaleOrderRequestHandler(pool, authService))
+	api.GET("/sales/order-statuses", saleshandler.ListSalesOrderStatusesRequestHandler(pool, authService))
+	api.GET("/sales", saleshandler.ListSalesRequestHandler(pool, authService))
 	api.GET("/sales/orders", saleshandler.ListSalesOrdersRequestHandler(pool, authService))
 	api.GET("/sales/orders/:id", saleshandler.GetSalesOrderRequestHandler(pool, authService))
 	api.PATCH("/sales/orders/:id", saleshandler.UpdateSaleOrderRequestHandler(pool, authService))

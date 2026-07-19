@@ -60,6 +60,18 @@ func UpdateSaleOrderRepository(pool *pgxpool.Pool, req UpdateSaleOrderInput) (*S
 		return nil, err
 	}
 
+	currentStatusDefinition, err := getSalesOrderStatusByCode(ctx, tx, current.Status)
+	if err != nil {
+		return nil, err
+	}
+	nextStatusDefinition, err := getSalesOrderStatusByCode(ctx, tx, req.Status)
+	if err != nil {
+		return nil, err
+	}
+	if nextStatusDefinition.SortOrder < currentStatusDefinition.SortOrder {
+		return nil, ErrSalesOrderStatusRegressionNotAllowed
+	}
+
 	if strings.TrimSpace(current.SaleID) != "" || saleStatusConsumesInventory(current.Status) {
 		return nil, ErrSalesOrderCannotUpdate
 	}

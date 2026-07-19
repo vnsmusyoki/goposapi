@@ -61,6 +61,11 @@ type salesOrdersResponse struct {
 	Message     string                         `json:"message,omitempty"`
 }
 
+type salesOrderStatusesResponse struct {
+	Statuses []reposales.SalesOrderStatusDefinition `json:"statuses"`
+	Message  string                                 `json:"message,omitempty"`
+}
+
 type salesOrderDetailResponse struct {
 	SalesOrder reposales.SalesOrderDetail `json:"salesOrder"`
 	Message    string                     `json:"message,omitempty"`
@@ -173,6 +178,10 @@ func CreateSaleOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Service
 			switch {
 			case errors.Is(err, reposales.ErrInvalidSaleInput):
 				c.JSON(http.StatusBadRequest, validationFailed(saleOrderFieldErrors(&payload)))
+			case errors.Is(err, reposales.ErrSalesOrderStatusDefinitionNotFound):
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"status": "A valid status is required.",
+				}))
 			default:
 				log.Printf("create sale order handler: repository failed business_id=%s err=%v", businessID, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to create sale order"})
@@ -281,6 +290,12 @@ func UpdateSaleOrderRequestHandler(pool *pgxpool.Pool, authService *auth.Service
 				c.JSON(http.StatusNotFound, gin.H{"message": "Sales order not found"})
 			case reposales.ErrSalesOrderCannotUpdate:
 				c.JSON(http.StatusConflict, gin.H{"message": "This sales order cannot be updated in its current status"})
+			case reposales.ErrSalesOrderStatusDefinitionNotFound:
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"status": "A valid status is required.",
+				}))
+			case reposales.ErrSalesOrderStatusRegressionNotAllowed:
+				c.JSON(http.StatusConflict, gin.H{"message": "Please select the same status or a higher-ranked status"})
 			default:
 				log.Printf("update sale order handler: repository failed business_id=%s sales_order_id=%s err=%v", businessID, salesOrderID, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update sale order"})
@@ -331,6 +346,10 @@ func ListSalesOrdersRequestHandler(pool *pgxpool.Pool, authService *auth.Service
 		orders, err := reposales.ListSalesOrdersRepository(pool, businessID, filters)
 		if err != nil {
 			switch err {
+			case reposales.ErrInvalidSaleInput:
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"status": "Status is required.",
+				}))
 			case reposales.ErrBusinessNotResolved:
 				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
 					"business_id": "Active business could not be resolved.",
@@ -345,6 +364,108 @@ func ListSalesOrdersRequestHandler(pool *pgxpool.Pool, authService *auth.Service
 		c.JSON(http.StatusOK, salesOrdersResponse{
 			SalesOrders: orders,
 			Message:     "Sales orders loaded successfully",
+		})
+	}
+}
+
+func ListSalesRequestHandler(pool *pgxpool.Pool, authService *auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, _, err := authService.CurrentUserFromRequest(c.Request.Context(), c.Request)
+		if err != nil {
+			log.Printf("list sales handler: auth lookup failed err=%v", err)
+			http.SetCookie(c.Writer, authService.ClearSessionCookie())
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Session expired. Please log in again."})
+			return
+		}
+
+		if !hasBusinessRole(user.Roles) {
+			c.JSON(http.StatusForbidden, gin.H{"message": "Business access is required"})
+			return
+		}
+
+		businessID := strings.TrimSpace(user.ActiveBusinessID)
+		if businessID == "" {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"business_id": "Active business could not be resolved.",
+			}))
+			return
+		}
+
+		filters := reposales.SalesOrderFilters{
+			LocationID:     strings.TrimSpace(c.Query("location_id")),
+			CustomerID:     strings.TrimSpace(c.Query("customer_id")),
+			Status:         strings.TrimSpace(c.Query("status")),
+			ShippingStatus: strings.TrimSpace(c.Query("shipping_status")),
+			DateFrom:       strings.TrimSpace(c.Query("date_from")),
+			DateTo:         strings.TrimSpace(c.Query("date_to")),
+			SearchQuery:    strings.TrimSpace(c.Query("search_query")),
+		}
+
+		sales, err := reposales.ListSalesRepository(pool, businessID, filters)
+		if err != nil {
+			switch err {
+			case reposales.ErrInvalidSaleInput:
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"status": "Status is required.",
+				}))
+			case reposales.ErrBusinessNotResolved:
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"business_id": "Active business could not be resolved.",
+				}))
+			default:
+				log.Printf("list sales handler: repository failed business_id=%s err=%v", businessID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load sales"})
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, salesOrdersResponse{
+			SalesOrders: sales,
+			Message:     "Sales loaded successfully",
+		})
+	}
+}
+
+func ListSalesOrderStatusesRequestHandler(pool *pgxpool.Pool, authService *auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, _, err := authService.CurrentUserFromRequest(c.Request.Context(), c.Request)
+		if err != nil {
+			log.Printf("list sales order statuses handler: auth lookup failed err=%v", err)
+			http.SetCookie(c.Writer, authService.ClearSessionCookie())
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Session expired. Please log in again."})
+			return
+		}
+
+		if !hasBusinessRole(user.Roles) {
+			c.JSON(http.StatusForbidden, gin.H{"message": "Business access is required"})
+			return
+		}
+
+		businessID := strings.TrimSpace(user.ActiveBusinessID)
+		if businessID == "" {
+			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+				"business_id": "Active business could not be resolved.",
+			}))
+			return
+		}
+
+		statuses, err := reposales.ListSalesOrderStatusesRepository(pool, businessID)
+		if err != nil {
+			switch err {
+			case reposales.ErrBusinessNotResolved:
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"business_id": "Active business could not be resolved.",
+				}))
+			default:
+				log.Printf("list sales order statuses handler: repository failed business_id=%s err=%v", businessID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to load sales order statuses"})
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, salesOrderStatusesResponse{
+			Statuses: statuses,
+			Message:  "Sales order statuses loaded successfully",
 		})
 	}
 }
@@ -437,18 +558,10 @@ func UpdateSalesOrderStatusRequestHandler(pool *pgxpool.Pool, authService *auth.
 			return
 		}
 
-		status := strings.TrimSpace(derefString(payload.Status))
-		if !allowedSaleStatuses[strings.ToLower(status)] {
-			c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
-				"status": "A valid status is required.",
-			}))
-			return
-		}
-
 		updated, err := reposales.UpdateSalesOrderStatusRepository(pool, reposales.UpdateSalesOrderStatusInput{
 			BusinessID:        businessID,
 			SalesOrderID:      salesOrderID,
-			Status:            status,
+			Status:            derefString(payload.Status),
 			ReserveOrderItems: derefBool(payload.ReserveOrderItems),
 			CreatedBy:         user.ID,
 			CreatedByName:     user.FullName,
@@ -461,6 +574,12 @@ func UpdateSalesOrderStatusRequestHandler(pool *pgxpool.Pool, authService *auth.
 				}))
 			case reposales.ErrSaleNotFound:
 				c.JSON(http.StatusNotFound, gin.H{"message": "Sales order not found"})
+			case reposales.ErrSalesOrderStatusDefinitionNotFound:
+				c.JSON(http.StatusBadRequest, validationFailed(map[string]string{
+					"status": "A valid status is required.",
+				}))
+			case reposales.ErrSalesOrderStatusRegressionNotAllowed:
+				c.JSON(http.StatusConflict, gin.H{"message": "Please select the same status or a higher-ranked status"})
 			default:
 				log.Printf("update sales order status handler: repository failed business_id=%s sales_order_id=%s err=%v", businessID, salesOrderID, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to update sales order status"})
@@ -588,7 +707,7 @@ func saleOrderFieldErrors(payload *createSaleOrderPayload) map[string]string {
 	if payload == nil || payload.SaleDate == nil || strings.TrimSpace(*payload.SaleDate) == "" {
 		errs["sale_date"] = "Sale date is required."
 	}
-	if payload == nil || payload.Status == nil || !allowedSaleStatuses[strings.ToLower(strings.TrimSpace(derefString(payload.Status)))] {
+	if payload == nil || payload.Status == nil || strings.TrimSpace(derefString(payload.Status)) == "" {
 		errs["status"] = "Status is required."
 	}
 	if payload == nil || len(payload.Items) == 0 {
@@ -658,13 +777,4 @@ func hasBusinessRole(roles []auth.RoleResponse) bool {
 		}
 	}
 	return false
-}
-
-var allowedSaleStatuses = map[string]bool{
-	"draft":              true,
-	"pending_approval":   true,
-	"approved":           true,
-	"processing":         true,
-	"ready_for_shipment": true,
-	"completed":          true,
 }

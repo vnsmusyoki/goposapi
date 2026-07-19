@@ -10,6 +10,113 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
+func ListSalesOrderStatusesRepository(pool *pgxpool.Pool, businessID string) ([]SalesOrderStatusDefinition, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	businessID = strings.TrimSpace(businessID)
+	if businessID == "" {
+		return nil, ErrBusinessNotResolved
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT
+			code,
+			name,
+			what_happens,
+			requires_further_action,
+			sort_order
+		FROM sale_order_statuses
+		ORDER BY sort_order ASC, code ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("load sales order statuses: %w", err)
+	}
+	defer rows.Close()
+
+	statuses := make([]SalesOrderStatusDefinition, 0)
+	for rows.Next() {
+		var status SalesOrderStatusDefinition
+		if err := rows.Scan(
+			&status.Code,
+			&status.Name,
+			&status.WhatHappens,
+			&status.RequiresFurtherAction,
+			&status.SortOrder,
+		); err != nil {
+			return nil, fmt.Errorf("scan sales order status: %w", err)
+		}
+		statuses = append(statuses, status)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate sales order statuses: %w", err)
+	}
+
+	return statuses, nil
+}
+
+func getSalesOrderStatusByCode(ctx context.Context, querier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, code string) (*SalesOrderStatusDefinition, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return nil, ErrSalesOrderStatusDefinitionNotFound
+	}
+
+	var status SalesOrderStatusDefinition
+	if err := querier.QueryRow(ctx, `
+		SELECT
+			code,
+			name,
+			what_happens,
+			requires_further_action,
+			sort_order
+		FROM sale_order_statuses
+		WHERE code = $1
+		LIMIT 1
+	`, code).Scan(
+		&status.Code,
+		&status.Name,
+		&status.WhatHappens,
+		&status.RequiresFurtherAction,
+		&status.SortOrder,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrSalesOrderStatusDefinitionNotFound
+		}
+		return nil, fmt.Errorf("load sales order status definition: %w", err)
+	}
+
+	return &status, nil
+}
+
+func resolveSalesOrderStatusDefinition(ctx context.Context, querier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, code string) (*SalesOrderStatusDefinition, error) {
+	return getSalesOrderStatusByCode(ctx, querier, code)
+}
+
+func loadSalesOrderStatusTransitionTx(ctx context.Context, querier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, currentStatus, nextStatus string) (*SalesOrderStatusDefinition, *SalesOrderStatusDefinition, error) {
+	current, err := getSalesOrderStatusByCode(ctx, querier, currentStatus)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	next, err := getSalesOrderStatusByCode(ctx, querier, nextStatus)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if current != nil && next != nil && next.SortOrder < current.SortOrder {
+		return nil, nil, ErrSalesOrderStatusRegressionNotAllowed
+	}
+
+	return current, next, nil
+}
+
 type salesOrderLifecycleSnapshot struct {
 	ID                string
 	ReferenceNumber   string
@@ -45,6 +152,11 @@ func UpdateSalesOrderStatusRepository(pool *pgxpool.Pool, req UpdateSalesOrderSt
 		return nil, err
 	}
 
+	_, _, err = loadSalesOrderStatusTransitionTx(ctx, tx, current.Status, req.Status)
+	if err != nil {
+		return nil, err
+	}
+
 	if _, err := tx.Exec(ctx, `
 		UPDATE sales_orders
 		SET status = $2,
@@ -58,10 +170,10 @@ func UpdateSalesOrderStatusRepository(pool *pgxpool.Pool, req UpdateSalesOrderSt
 	if saleStatusConsumesInventory(req.Status) {
 		if strings.TrimSpace(current.SaleID) == "" {
 			if err := finalizeSalesOrderInventoryTx(ctx, tx, CreateSaleOrderInput{
-				BusinessID: req.BusinessID,
-				LocationID: current.LocationID,
-				Status:     req.Status,
-				CreatedBy:  req.CreatedBy,
+				BusinessID:    req.BusinessID,
+				LocationID:    current.LocationID,
+				Status:        req.Status,
+				CreatedBy:     req.CreatedBy,
 				CreatedByName: req.CreatedByName,
 			}, req.SalesOrderID, "", req.CreatedBy); err != nil {
 				return nil, err

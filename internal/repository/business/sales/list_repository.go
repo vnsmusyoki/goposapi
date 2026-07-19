@@ -29,9 +29,9 @@ func ListSalesOrdersRepository(pool *pgxpool.Pool, businessID string, filters Sa
 	orders := make([]SalesOrderListItem, 0)
 	for rows.Next() {
 		var (
-			order            SalesOrderListItem
-			customerID       string
-			paidAmount       float64
+			order      SalesOrderListItem
+			customerID string
+			paidAmount float64
 		)
 		if err := rows.Scan(
 			&order.ID,
@@ -200,11 +200,11 @@ func scanSalesOrder(scanner interface {
 	Scan(dest ...any) error
 }) (Sale, error) {
 	var (
-		order       Sale
-		customerID  string
+		order        Sale
+		customerID   string
 		locationName string
-		paidAmount  float64
-		balanceDue  float64
+		paidAmount   float64
+		balanceDue   float64
 	)
 
 	if err := scanner.Scan(
