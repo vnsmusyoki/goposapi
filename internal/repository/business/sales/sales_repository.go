@@ -73,7 +73,7 @@ func salesListQuery(businessID string, filters SalesOrderFilters) (string, []any
 			s.id::text,
 			s.business_id::text,
 			s.location_id::text,
-			'' AS customer_id,
+			COALESCE(s.customer_id::text, '') AS customer_id,
 			COALESCE(loc.location_name, '') AS location_name,
 			s.reference_number,
 			s.sale_date::text,
@@ -83,8 +83,8 @@ func salesListQuery(businessID string, filters SalesOrderFilters) (string, []any
 			'completed' AS shipping_status,
 			s.items_count,
 			s.grand_total,
-			0::numeric AS paid_amount,
-			s.grand_total::numeric AS balance_due,
+			COALESCE(s.paid_amount, 0)::numeric AS paid_amount,
+			COALESCE(s.balance_due, s.grand_total)::numeric AS balance_due,
 			s.id::text AS sale_id,
 			s.created_at::text AS converted_at,
 			s.created_at::text,
@@ -156,7 +156,7 @@ func GetSaleRepository(pool *pgxpool.Pool, businessID, saleID string) (*Sale, er
 			id::text,
 			business_id::text,
 			location_id::text,
-			'' AS customer_id,
+			COALESCE(customer_id::text, '') AS customer_id,
 			reference_number,
 			sale_date::text,
 			COALESCE(customer_name, ''),
@@ -173,8 +173,8 @@ func GetSaleRepository(pool *pgxpool.Pool, businessID, saleID string) (*Sale, er
 			'' AS stock_accounting_method,
 			FALSE AS reserve_order_items,
 			'completed' AS shipping_status,
-			0::numeric AS paid_amount,
-			grand_total::numeric AS balance_due,
+			COALESCE(paid_amount, 0)::numeric AS paid_amount,
+			COALESCE(balance_due, grand_total)::numeric AS balance_due,
 			id::text AS sale_id,
 			created_at::text AS converted_at,
 			COALESCE(created_by::text, ''),
@@ -225,5 +225,89 @@ func GetSaleRepository(pool *pgxpool.Pool, businessID, saleID string) (*Sale, er
 	}
 
 	_ = customerID
+	return &sale, nil
+}
+
+func GetSaleRepositoryTx(ctx context.Context, tx saleInventoryTx, businessID, saleID string) (*Sale, error) {
+	businessID = strings.TrimSpace(businessID)
+	saleID = strings.TrimSpace(saleID)
+	if businessID == "" || saleID == "" {
+		return nil, ErrBusinessNotResolved
+	}
+
+	row := tx.QueryRow(ctx, `
+		SELECT
+			id::text,
+			business_id::text,
+			location_id::text,
+			COALESCE(customer_id::text, '') AS customer_id,
+			reference_number,
+			sale_date::text,
+			COALESCE(customer_name, ''),
+			COALESCE(customer_phone, ''),
+			COALESCE(customer_email, ''),
+			status,
+			subtotal,
+			total_discount,
+			total_tax,
+			grand_total,
+			items_count,
+			total_quantity,
+			COALESCE(notes, ''),
+			'' AS stock_accounting_method,
+			FALSE AS reserve_order_items,
+			'completed' AS shipping_status,
+			COALESCE(paid_amount, 0)::numeric AS paid_amount,
+			COALESCE(balance_due, grand_total)::numeric AS balance_due,
+			id::text AS sale_id,
+			created_at::text AS converted_at,
+			COALESCE(created_by::text, ''),
+			created_at::text,
+			updated_at::text
+		FROM sales
+		WHERE business_id = $1::uuid
+		  AND id = $2::uuid
+		  AND deleted_at IS NULL
+		LIMIT 1
+	`, businessID, saleID)
+
+	var sale Sale
+	var customerID string
+	if err := row.Scan(
+		&sale.ID,
+		&sale.BusinessID,
+		&sale.LocationID,
+		&customerID,
+		&sale.ReferenceNumber,
+		&sale.SaleDate,
+		&sale.CustomerName,
+		&sale.CustomerPhone,
+		&sale.CustomerEmail,
+		&sale.Status,
+		&sale.Subtotal,
+		&sale.TotalDiscount,
+		&sale.TotalTax,
+		&sale.GrandTotal,
+		&sale.ItemsCount,
+		&sale.TotalQuantity,
+		&sale.Notes,
+		&sale.StockAccountingMethod,
+		&sale.ReserveOrderItems,
+		&sale.ShippingStatus,
+		&sale.PaidAmount,
+		&sale.BalanceDue,
+		&sale.SaleID,
+		&sale.ConvertedAt,
+		&sale.CreatedBy,
+		&sale.CreatedAt,
+		&sale.UpdatedAt,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrSaleNotFound
+		}
+		return nil, fmt.Errorf("load sale: %w", err)
+	}
+
+	sale.CustomerID = customerID
 	return &sale, nil
 }

@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS stock_transfer_item_batch_allocations;

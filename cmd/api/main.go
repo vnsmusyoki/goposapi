@@ -17,6 +17,7 @@ import (
 	purchaseorderhandler "pos/internal/handlers/business/purchaseorder"
 	saleshandler "pos/internal/handlers/business/sales"
 	settingshandler "pos/internal/handlers/business/settings"
+	stocktransferhandler "pos/internal/handlers/business/stocktransfer"
 	subcategoryhandler "pos/internal/handlers/business/subcategory"
 	supplierhandler "pos/internal/handlers/business/supplier"
 	unithandler "pos/internal/handlers/business/unit"
@@ -89,6 +90,9 @@ func main() {
 	api.GET("/products/:id", producthandler.GetProductRequestHandler(pool, authService))
 	api.GET("/products/:id/price-history", producthandler.ListProductPriceHistoryRequestHandler(pool, authService))
 	api.PUT("/products/:id", producthandler.UpdateProductRequestHandler(pool, authService))
+	api.GET("/business/transfers", stocktransferhandler.ListStockTransfersRequestHandler(pool, authService))
+	api.POST("/business/transfers", stocktransferhandler.CreateStockTransferRequestHandler(pool, authService))
+	api.GET("/business/transfers/:id", stocktransferhandler.GetStockTransferRequestHandler(pool, authService))
 	api.GET("/brands", brandhandler.ListBrandsRequestHandler(pool, authService))
 	api.POST("/brands", brandhandler.CreateBrandRequestHandler(pool, authService))
 	api.PUT("/brands/:id", brandhandler.UpdateBrandRequestHandler(pool, authService))
@@ -142,6 +146,7 @@ func main() {
 	api.PATCH("/sales/orders/:id", saleshandler.UpdateSaleOrderRequestHandler(pool, authService))
 	api.PATCH("/sales/orders/:id/status", saleshandler.UpdateSalesOrderStatusRequestHandler(pool, authService))
 	api.DELETE("/sales/orders/:id", saleshandler.DeleteSalesOrderRequestHandler(pool, authService))
+	api.POST("/pos/sales", saleshandler.CreatePosSaleRequestHandler(pool, authService))
 	api.POST("/pos/registers/open", cashregisterhandler.OpenCashRegisterRequestHandler(pool, authService))
 	api.GET("/pos/readiness", cashregisterhandler.GetPosReadinessRequestHandler(pool, authService))
 	api.GET("/business/settings", settingshandler.GetBusinessSettingsRequestHandler(pool, authService))

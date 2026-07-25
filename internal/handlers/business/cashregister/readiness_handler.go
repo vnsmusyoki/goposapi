@@ -132,6 +132,7 @@ func GetPosReadinessRequestHandler(pool *pgxpool.Pool, authService *auth.Service
 			"mpesaConfigured":       readiness.MpesaConfigured,
 			"mpesaStkPushEnabled":   readiness.MpesaStkPushEnabled,
 			"paymentMethods":        readiness.PaymentMethods,
+			"paymentMethodDetails":  readiness.PaymentMethodDetails,
 			"blockingReasons":       readiness.BlockingReasons,
 			"warnings":              readiness.Warnings,
 			"message":               "POS readiness checks loaded successfully",

@@ -21,8 +21,22 @@ type PosReadiness struct {
 	MpesaConfigured       bool
 	MpesaStkPushEnabled   bool
 	PaymentMethods        []string
+	PaymentMethodDetails  []PaymentMethodDefinition
 	BlockingReasons       []string
 	Warnings              []string
+}
+
+type PaymentMethodDefinition struct {
+	ID                string `json:"id"`
+	Code              string `json:"code"`
+	Name              string `json:"name"`
+	Alias             string `json:"alias"`
+	Description       string `json:"description"`
+	IsEnabled         bool   `json:"isEnabled"`
+	IsCredit          bool   `json:"isCredit"`
+	RequiresReference bool   `json:"requiresReference"`
+	RequiresPhone     bool   `json:"requiresPhone"`
+	SortOrder         int    `json:"sortOrder"`
 }
 
 type OpenRegisterInput struct {

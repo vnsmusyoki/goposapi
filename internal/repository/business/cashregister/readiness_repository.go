@@ -31,13 +31,25 @@ func GetPosReadinessRepository(pool *pgxpool.Pool, businessID, userID, businessL
 	readiness := &PosReadiness{
 		BusinessLocationID:   location.ID,
 		BusinessLocationName: location.Name,
-		PaymentMethods:       location.PaymentMethods,
 		PrinterConfigured:    true,
 		PrinterTestRequired:  true,
-		MpesaConfigured:      location.hasPaymentMethod("mpesa"),
-		MpesaStkPushEnabled:  location.hasPaymentMethod("mpesa"),
 		Warnings:             []string{"Printer test has not been completed for this POS session."},
 	}
+
+	paymentMethodDetails, err := listEnabledPaymentMethods(ctx, pool, businessID)
+	if err != nil {
+		return nil, err
+	}
+	if len(paymentMethodDetails) == 0 {
+		paymentMethodDetails = fallbackPaymentMethodDefinitions(location.PaymentMethods)
+	}
+	readiness.PaymentMethodDetails = paymentMethodDetails
+	readiness.PaymentMethods = make([]string, 0, len(paymentMethodDetails))
+	for _, method := range paymentMethodDetails {
+		readiness.PaymentMethods = append(readiness.PaymentMethods, method.Code)
+	}
+	readiness.MpesaConfigured = hasPaymentMethodCode(paymentMethodDetails, "mpesa")
+	readiness.MpesaStkPushEnabled = readiness.MpesaConfigured
 
 	activeRegister, err := getActiveCashRegisterForUser(ctx, pool, businessID, userID, location.ID)
 	if err != nil {
@@ -102,6 +114,143 @@ func resolveReadinessLocation(ctx context.Context, pool *pgxpool.Pool, businessI
 		location.PaymentMethods = []string{"cash"}
 	}
 	return location, nil
+}
+
+func listEnabledPaymentMethods(ctx context.Context, pool *pgxpool.Pool, businessID string) ([]PaymentMethodDefinition, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT
+			id::text,
+			code,
+			name,
+			COALESCE(alias, ''),
+			description,
+			is_enabled,
+			is_credit,
+			requires_reference,
+			requires_phone,
+			sort_order
+		FROM payment_methods
+		WHERE business_id = $1::uuid
+		  AND is_enabled = TRUE
+		ORDER BY sort_order ASC, name ASC
+	`, businessID)
+	if err != nil {
+		return nil, fmt.Errorf("load POS payment methods: %w", err)
+	}
+	defer rows.Close()
+
+	methods := make([]PaymentMethodDefinition, 0)
+	for rows.Next() {
+		var method PaymentMethodDefinition
+		if err := rows.Scan(
+			&method.ID,
+			&method.Code,
+			&method.Name,
+			&method.Alias,
+			&method.Description,
+			&method.IsEnabled,
+			&method.IsCredit,
+			&method.RequiresReference,
+			&method.RequiresPhone,
+			&method.SortOrder,
+		); err != nil {
+			return nil, fmt.Errorf("scan POS payment method: %w", err)
+		}
+		methods = append(methods, method)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate POS payment methods: %w", err)
+	}
+	return methods, nil
+}
+
+func fallbackPaymentMethodDefinitions(values []string) []PaymentMethodDefinition {
+	if len(values) == 0 {
+		values = []string{"cash"}
+	}
+	methods := make([]PaymentMethodDefinition, 0, len(values))
+	for index, value := range values {
+		code := normalizePaymentCode(value)
+		if code == "" {
+			continue
+		}
+		methods = append(methods, PaymentMethodDefinition{
+			Code:          code,
+			Name:          fallbackPaymentMethodName(code),
+			Alias:         fallbackPaymentMethodAlias(code),
+			IsEnabled:     true,
+			IsCredit:      code == "credit",
+			RequiresPhone: code == "mpesa",
+			SortOrder:     (index + 1) * 10,
+		})
+	}
+	return methods
+}
+
+func hasPaymentMethodCode(methods []PaymentMethodDefinition, code string) bool {
+	target := normalizePaymentCode(code)
+	for _, method := range methods {
+		if normalizePaymentCode(method.Code) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizePaymentCode(value string) string {
+	normalized := strings.NewReplacer("-", "", "_", "", " ", "").Replace(strings.ToLower(strings.TrimSpace(value)))
+	switch normalized {
+	case "mpesa", "mpesastk", "stkpush", "mobile":
+		return "mpesa"
+	case "giftcard", "voucher":
+		return "gift"
+	case "customercredit":
+		return "credit"
+	default:
+		return normalized
+	}
+}
+
+func fallbackPaymentMethodName(code string) string {
+	switch code {
+	case "cash":
+		return "Cash"
+	case "card":
+		return "Card"
+	case "mpesa":
+		return "MPesa"
+	case "gift":
+		return "Gift Card"
+	case "credit":
+		return "Credit"
+	default:
+		return strings.Title(strings.ReplaceAll(code, "_", " "))
+	}
+}
+
+func fallbackPaymentMethodAlias(code string) string {
+	switch code {
+	case "cash":
+		return "Cash"
+	case "cheque":
+		return "Cheque"
+	case "card":
+		return "Card"
+	case "bank_transfer":
+		return "Bank"
+	case "advance":
+		return "Advance"
+	case "mpesa":
+		return "MPesa"
+	case "gift":
+		return "Gift"
+	case "credit":
+		return "Credit"
+	case "other":
+		return "Other"
+	default:
+		return fallbackPaymentMethodName(code)
+	}
 }
 
 func getActiveCashRegisterForUser(ctx context.Context, pool *pgxpool.Pool, businessID, userID, businessLocationID string) (*ActiveRegister, error) {
