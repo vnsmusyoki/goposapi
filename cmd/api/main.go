@@ -11,6 +11,8 @@ import (
 	cashregisterhandler "pos/internal/handlers/business/cashregister"
 	categoryhandler "pos/internal/handlers/business/category"
 	customerhandler "pos/internal/handlers/business/customer"
+	expensecategoryhandler "pos/internal/handlers/business/expensecategory"
+	expensesubcategoryhandler "pos/internal/handlers/business/expensesubcategory"
 	locationhandler "pos/internal/handlers/business/location"
 	openingstockhandler "pos/internal/handlers/business/openingstock"
 	producthandler "pos/internal/handlers/business/product"
@@ -105,6 +107,14 @@ func main() {
 	api.POST("/sub-categories", subcategoryhandler.CreateSubCategoryRequestHandler(pool, authService))
 	api.PUT("/sub-categories/:id", subcategoryhandler.UpdateSubCategoryRequestHandler(pool, authService))
 	api.DELETE("/sub-categories/:id", subcategoryhandler.DeleteSubCategoryRequestHandler(pool, authService))
+	api.GET("/expense-categories", expensecategoryhandler.ListExpenseCategoriesRequestHandler(pool, authService))
+	api.POST("/expense-categories", expensecategoryhandler.CreateExpenseCategoryRequestHandler(pool, authService))
+	api.PUT("/expense-categories/:id", expensecategoryhandler.UpdateExpenseCategoryRequestHandler(pool, authService))
+	api.DELETE("/expense-categories/:id", expensecategoryhandler.DeleteExpenseCategoryRequestHandler(pool, authService))
+	api.GET("/expense-sub-categories", expensesubcategoryhandler.ListExpenseSubCategoriesRequestHandler(pool, authService))
+	api.POST("/expense-sub-categories", expensesubcategoryhandler.CreateExpenseSubCategoryRequestHandler(pool, authService))
+	api.PUT("/expense-sub-categories/:id", expensesubcategoryhandler.UpdateExpenseSubCategoryRequestHandler(pool, authService))
+	api.DELETE("/expense-sub-categories/:id", expensesubcategoryhandler.DeleteExpenseSubCategoryRequestHandler(pool, authService))
 	api.GET("/business/locations", locationhandler.GetBusinessLocationsRequestHandler(pool, authService))
 	api.POST("/business/locations", locationhandler.CreateBusinessLocationRequestHandler(pool, authService))
 	api.DELETE("/business/locations/:id", locationhandler.DeleteBusinessLocationRequestHandler(pool, authService))
